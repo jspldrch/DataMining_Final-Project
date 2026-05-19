@@ -26,8 +26,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 |-----|----------|----------------|
 | 01 | `notebooks/01_exploration.ipynb` | 04, 05, 06 |
 | 02 | `notebooks/02_eda_analysis_local.ipynb` | 07 |
-| 00 | `00_colab_bootstrap.ipynb` | Colab-Session starten |
-| 03 | `03_preprocessing.ipynb` | 06 – Features → Parquet |
+| 03 | `03_preprocessing.ipynb` | 06 – Features → Parquet (Colab: Link im Notebook) |
 | 04 | `04_modeling.ipynb` | 06 – Baselines + LightGBM + Submission |
 
 ## Sonstiges

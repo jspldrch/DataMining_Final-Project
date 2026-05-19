@@ -49,9 +49,9 @@ jupyter notebook notebooks/02_eda_analysis_local.ipynb
 |---|--------|--------|
 | Code | Git / lokaler Clone | `git clone` / `git pull` → `/content/DataMining_Final-Project` |
 | Train/Test CSV | `data/` im Repo-Ordner | **nur** auf Drive: `MyDrive/DataMining/data/` |
-| Start | `01_exploration` | **`00_colab_bootstrap`** → `03` → `04` |
+| Start | `01_exploration` | **03** → **04** (je [Open in Colab](docs/02_COLAB_SETUP.md)) |
 
-Siehe [docs/02_COLAB_SETUP.md](docs/02_COLAB_SETUP.md) — **kein** manuelles Hochladen von Code auf Drive.
+Siehe [docs/02_COLAB_SETUP.md](docs/02_COLAB_SETUP.md) — Zelle 1 macht `git pull` + Drive-Pfade.
 
 ## Dokumentation
 

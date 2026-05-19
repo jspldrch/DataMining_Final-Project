@@ -2,11 +2,10 @@
 
 | Notebook | Beschreibung | Status |
 |----------|--------------|--------|
-| `00_colab_bootstrap.ipynb` | **Colab:** `git pull` + Drive-CSVs (pro Session) | ✓ |
 | `01_exploration.ipynb` | Data Discovery & EDA (Sample / Colab) | ✓ |
 | `02_eda_analysis_local.ipynb` | EDA chunkweise nach Regionen (~8 GB RAM) | ✓ |
-| `03_preprocessing.ipynb` | Features (Lags/Rolling) → Parquet | ✓ |
-| `04_modeling.ipynb` | Baselines + LightGBM + Submission | ✓ |
+| `03_preprocessing.ipynb` | Features → Parquet (**Colab:** GitHub-Link im Notebook) | ✓ |
+| `04_modeling.ipynb` | LightGBM + Submission (**Colab:** GitHub-Link im Notebook) | ✓ |
 
 **Start:** vom Projektroot `jupyter notebook notebooks/01_exploration.ipynb`
 
