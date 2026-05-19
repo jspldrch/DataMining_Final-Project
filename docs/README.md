@@ -5,7 +5,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 | Nr. | Datei | Wann lesen |
 |-----|--------|------------|
 | **01** | [01_DATA_SETUP.md](01_DATA_SETUP.md) | Zuerst: Daten laden & Ordnerstruktur |
-| **02** | [02_COLAB_SETUP.md](02_COLAB_SETUP.md) | Wenn du in Google Colab arbeitest |
+| **02** | [02_COLAB_SETUP.md](02_COLAB_SETUP.md) | Colab: Git für Code, Drive nur für CSVs |
 | **03** | [03_PROJECT_PLAN.md](03_PROJECT_PLAN.md) | Überblick: Meilensteine & nächste Schritte |
 | **04** | [04_TRAIN_DATA_ANALYSIS.md](04_TRAIN_DATA_ANALYSIS.md) | Train-Set verstehen (Struktur, Score, Regionen) |
 | **05** | [05_TEST_DATA_ANALYSIS.md](05_TEST_DATA_ANALYSIS.md) | Test-Set & Fallstricke (Datum, 91 Tage/Region) |
@@ -26,6 +26,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 |-----|----------|----------------|
 | 01 | `notebooks/01_exploration.ipynb` | 04, 05, 06 |
 | 02 | `notebooks/02_eda_analysis_local.ipynb` | 07 |
+| 00 | `00_colab_bootstrap.ipynb` | Colab-Session starten |
 | 03 | `03_preprocessing.ipynb` | 06 – Features → Parquet |
 | 04 | `04_modeling.ipynb` | 06 – Baselines + LightGBM + Submission |
 

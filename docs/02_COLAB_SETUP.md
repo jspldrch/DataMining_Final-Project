@@ -2,121 +2,114 @@
 
 > **Dokumentation Nr. 02** · [Lesereihenfolge](README.md)
 
-Zwei getrennte Uploads: **Code** (klein) und **Daten** (groß, ~1,1 GB).
+## Prinzip: Git für Code, Drive nur für CSVs
 
-## Zielstruktur auf Google Drive
+| Was | Wo | Wie aktualisieren |
+|-----|-----|-------------------|
+| Code, Notebooks, `scripts/` | **GitHub** → `git clone` / `git pull` in Colab | `git push` vom Mac |
+| `train.csv`, `test.csv` | **Google Drive** (einmal hochladen) | Manuell / Drive-App |
+| Parquet, Submissions | **Drive** `outputs/` (Symlink) | Entstehen in Notebook 03/04 |
+
+**Du musst keinen Projektordner mehr auf Drive pflegen** — nur noch den Datenordner.
+
+---
+
+## Einmalig: CSVs auf Drive
 
 ```
 My Drive/
 └── DataMining/
     ├── data/
-    │   ├── train.csv      (~1,1 GB)
-    │   └── test.csv       (~19 MB)
-    └── DataMining_Final-Project/    ← Repo (ohne venv, ohne CSVs)
-        ├── config/
-        ├── notebooks/
-        ├── requirements.txt
-        └── ...
+    │   ├── train.csv   (~1,1 GB)
+    │   └── test.csv    (~19 MB)
+    └── outputs/        (wird von Colab angelegt)
+        ├── processed/
+        └── submissions/
 ```
 
-Der Pfad `MyDrive/DataMining/data` ist in `config/paths.py` voreingestellt (`COLAB_DATA_DIR`).
+Pfad in Colab: `/content/drive/MyDrive/DataMining/data/`
 
 ---
 
-## Schritt 1: Daten auf Drive hochladen
+## Jede Colab-Session (3 Schritte)
 
-1. Im Browser [Google Drive](https://drive.google.com) öffnen.
-2. Ordner anlegen: `DataMining` → darin `data`.
-3. `train.csv` und `test.csv` in `DataMining/data/` hochladen.  
-   (1,1 GB dauert – ggf. über Desktop-App oder zip entpacken auf Drive.)
+### 1. Runtime
 
-**Nicht nötig in Colab:** `train_sample.csv` (nur für lokalen PC).
+- **CPU** (keine GPU nötig)
+- Optional: High-RAM
 
----
+### 2. Bootstrap ausführen
 
-## Schritt 2: Code auf Drive (oder GitHub)
+**Option A – Notebook** (empfohlen):
 
-### Variante A – GitHub (empfohlen fürs Team)
+1. GitHub → `notebooks/00_colab_bootstrap.ipynb` → **Open in Colab**
+2. Einzige Code-Zelle ausführen
 
-Repo pushen, dann in Colab:
-
-```python
-!git clone https://github.com/<DEIN-USER>/DataMining_Final-Project.git
-%cd DataMining_Final-Project
-```
-
-### Variante B – Ordner manuell hochladen
-
-Projektordner als Zip packen (**ohne** `venv/`, **ohne** `data/*.csv`), nach  
-`My Drive/DataMining/DataMining_Final-Project/` entpacken.
-
-Wichtig: Ordner `config/` muss dabei sein (für `from config.paths import …`).
-
----
-
-## Schritt 3: Notebook in Colab öffnen
-
-1. [colab.research.google.com](https://colab.research.google.com)
-2. **Datei → Notebook hochladen**  
-   Oder: `DataMining_Final-Project/notebooks/01_exploration.ipynb` in Drive öffnen → **Mit Google Colaboratory öffnen**
-3. **Runtime → Change runtime type** → CPU reicht für EDA; **RAM**: „High-RAM“ falls verfügbar (voller `train.csv`).
-
----
-
-## Schritt 4: Erste Zellen ausführen
-
-Das Notebook macht automatisch:
-
-1. `drive.mount("/content/drive")`
-2. `setup_environment()` → nutzt `train.csv` auf Drive, `USE_CHUNKED_TRAIN = True`
-
-**Vor dem Lauf prüfen:** Ausgabe von Zelle „Umgebung“:
-
-```
-✓ Train gefunden (1100.x MB)
-✓ Test gefunden (19.x MB)
-```
-
-### Anderer Drive-Pfad?
-
-In Colab, direkt nach dem Mount, einmalig:
-
-```python
-import config.paths as cp
-cp.COLAB_DATA_DIR = "/content/drive/MyDrive/DEIN/ORDNER/data"
-```
-
-Dann `setup_environment()` erneut ausführen.
-
----
-
-## Schritt 5: Requirements installieren
-
-Einmal pro Colab-Sitzung (neue Zelle oben oder nach `%cd` ins Projekt):
-
-```python
-%cd /content/DataMining_Final-Project   # oder dein Clone-Pfad
-!pip install -r requirements.txt
-```
-
----
-
-## Typischer Ablauf (Copy-Paste, neue Colab-Session)
+**Option B – Copy-Paste in eine Zelle:**
 
 ```python
 from google.colab import drive
 drive.mount("/content/drive")
 
-# Nur bei GitHub-Clone:
-# !git clone https://github.com/<USER>/DataMining_Final-Project.git
+REPO = "/content/DataMining_Final-Project"
+!test -d "$REPO/.git" && (cd "$REPO" && git pull) || git clone https://github.com/jspldrch/DataMining_Final-Project.git "$REPO"
+
+%cd $REPO
+!pip install -q -r requirements.txt
 
 import os
-os.chdir("/content/drive/MyDrive/DataMining/DataMining_Final-Project")
-
-!pip install -q -r requirements.txt
+from pathlib import Path
+DATA = Path("/content/drive/MyDrive/DataMining/data")
+assert (DATA / "train.csv").exists(), f"CSVs fehlen in {DATA}"
+print("OK — Code von Git, Daten auf Drive")
 ```
 
-Danach alle Zellen in `01_exploration.ipynb` ausführen.
+### 3. Notebooks aus dem Clone öffnen
+
+Nach Bootstrap liegt alles unter:
+
+```
+/content/DataMining_Final-Project/
+├── notebooks/03_preprocessing.ipynb
+└── notebooks/04_modeling.ipynb
+```
+
+In Colab: **File → Open notebook** → Tab **Google Drive** ist nicht nötig — Pfad:
+
+```
+/content/DataMining_Final-Project/notebooks/03_preprocessing.ipynb
+```
+
+Oder im Dateibaum links unter `/content/DataMining_Final-Project/`.
+
+---
+
+## Workflow Mac ↔ Colab
+
+```text
+Mac:     ändern → git commit → git push
+Colab:   00_colab_bootstrap → git pull → 03 → 04
+Drive:   nur CSVs (unverändert)
+```
+
+**Kein** manuelles Hochladen von `scripts/`, `config/`, Notebooks nach Drive.
+
+---
+
+## Outputs (Parquet) auf Drive
+
+Bootstrap verlinkt `outputs/processed` → `MyDrive/DataMining/outputs/processed`.
+
+→ Notebook 03 kann unterbrochen werden; Parquet bleibt auf Drive für Notebook 04.
+
+---
+
+## Repo in Colab öffnen (Alternative)
+
+[colab.research.google.com](https://colab.research.google.com) → **GitHub** →  
+`jspldrch/DataMining_Final-Project` → Notebook wählen.
+
+Trotzdem **zuerst** Bootstrap-Zelle oder `drive.mount` + prüfen, dass CSVs auf Drive liegen — GitHub enthält **keine** CSVs.
 
 ---
 
@@ -124,15 +117,19 @@ Danach alle Zellen in `01_exploration.ipynb` ausführen.
 
 | Problem | Lösung |
 |---------|--------|
-| `ModuleNotFoundError: config` | `%cd` ins Projektroot, wo `config/` liegt |
-| Train nicht gefunden | Pfad in Drive prüfen; `COLAB_DATA_DIR` anpassen |
-| Out of Memory | Runtime mit mehr RAM; in Notebook bleibt Chunk-Loading aktiv |
-| Langsames Laden | Normal (~5–10 Min für 12M Zeilen beim ersten `load_train`) |
+| `ModuleNotFoundError: scripts` | Bootstrap ausführen; Arbeitsverzeichnis = `/content/DataMining_Final-Project` |
+| `train.csv` nicht gefunden | CSVs nach `MyDrive/DataMining/data/` |
+| Alter Code in Colab | Bootstrap erneut → `git pull` |
+| RAM voll bei 03 | Streaming-Modus (`MODE=full`) — siehe `03_preprocessing` |
+| Drive-Ordner `DataMining_Final-Project` | **Nicht mehr nötig** für Code (optional löschen/archivieren) |
 
 ---
 
-## Was du nicht committen / hochladen musst
+## Was nicht auf Drive / Git
 
-- `venv/`
-- `data/train.csv` (nur auf Drive)
-- `.ipynb_checkpoints/`
+| Datei | Git | Drive |
+|-------|-----|-------|
+| `train.csv`, `test.csv` | nein | **ja** |
+| `outputs/*.parquet` | nein | ja (via Symlink) |
+| `venv/` | nein | nein |
+| Code, Docs, Notebooks | **ja** | nein |

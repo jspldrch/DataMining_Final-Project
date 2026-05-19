@@ -2,6 +2,7 @@
 
 | Notebook | Beschreibung | Status |
 |----------|--------------|--------|
+| `00_colab_bootstrap.ipynb` | **Colab:** `git pull` + Drive-CSVs (pro Session) | ✓ |
 | `01_exploration.ipynb` | Data Discovery & EDA (Sample / Colab) | ✓ |
 | `02_eda_analysis_local.ipynb` | EDA chunkweise nach Regionen (~8 GB RAM) | ✓ |
 | `03_preprocessing.ipynb` | Features (Lags/Rolling) → Parquet | ✓ |

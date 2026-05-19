@@ -18,8 +18,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_DATA_DIR = PROJECT_ROOT / "data-mining-2026-final-project" / "data"
 CANONICAL_DATA_DIR = PROJECT_ROOT / "data"
 
-# Colab: adjust this to your Google Drive folder
-COLAB_DATA_DIR = "/content/drive/MyDrive/DataMining/data"
+# Colab: first match with train.csv wins (see resolve_colab_data_dir)
+COLAB_DATA_DIR = "/content/drive/MyDrive/DataMining/DataMining_Final-Project/data"
+COLAB_DATA_CANDIDATES = [
+    "/content/drive/MyDrive/DataMining/DataMining_Final-Project/data",
+    "/content/drive/MyDrive/DataMining/data",
+]
 
 FIGURES_DIR = PROJECT_ROOT / "outputs" / "figures"
 
@@ -31,6 +35,21 @@ def resolve_data_dir() -> Path:
     if LEGACY_DATA_DIR.exists():
         return LEGACY_DATA_DIR
     return CANONICAL_DATA_DIR
+
+
+def resolve_colab_data_dir(project_root: Path | None = None) -> Path:
+    """Pick first Colab Drive path that contains train.csv."""
+    root = project_root or PROJECT_ROOT
+    candidates = [
+        str(root / "data"),
+        *COLAB_DATA_CANDIDATES,
+        str(CANONICAL_DATA_DIR),
+    ]
+    for raw in candidates:
+        path = Path(raw)
+        if (path / "train.csv").exists():
+            return path
+    return Path(COLAB_DATA_DIR)
 
 
 def is_colab() -> bool:
@@ -54,7 +73,7 @@ def setup_environment() -> dict:
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     if colab:
-        data_dir = Path(COLAB_DATA_DIR)
+        data_dir = resolve_colab_data_dir()
         train_path = data_dir / "train.csv"
         test_path = data_dir / "test.csv"
         use_chunked = True
