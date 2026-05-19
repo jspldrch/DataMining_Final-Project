@@ -109,13 +109,40 @@ def submission_frame(region_ids: pd.Series, preds: np.ndarray) -> pd.DataFrame:
     return out
 
 
+def find_sample_submission(project_root: Path, data_dir: Path | None = None) -> Path | None:
+    """Locate Kaggle template CSV (repo, Drive data, or legacy folder)."""
+    candidates = [
+        project_root / "resources" / "sample_submission.csv",
+        project_root / "data-mining-2026-final-project" / "sample_submission.csv",
+        project_root / "data" / "sample_submission.csv",
+    ]
+    if data_dir is not None:
+        candidates.insert(0, data_dir / "sample_submission.csv")
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def build_submission_template(region_ids: pd.Series) -> pd.DataFrame:
+    """Kaggle columns with one row per region (sorted), preds filled with 0."""
+    regions = region_ids.drop_duplicates().sort_values().reset_index(drop=True)
+    out = pd.DataFrame({"region_id": regions})
+    for col in WEEK_COLS:
+        out[col] = 0.0
+    return out
+
+
 def align_to_sample_submission(
     submission: pd.DataFrame,
-    sample_path: Path,
+    template: Path | pd.DataFrame,
 ) -> pd.DataFrame:
     """Same region order and columns as sample_submission.csv."""
-    template = pd.read_csv(sample_path)
-    merged = template[["region_id"]].merge(submission, on="region_id", how="left")
+    if isinstance(template, Path):
+        base = pd.read_csv(template)
+    else:
+        base = template.copy()
+    merged = base[["region_id"]].merge(submission, on="region_id", how="left")
     for col in WEEK_COLS:
         merged[col] = merged[col].fillna(0.0)
     return merged

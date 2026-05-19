@@ -14,6 +14,7 @@ venv/
 data/
 data-mining-2026-final-project/
 *.csv
+!resources/sample_submission.csv
 *.zip
 *.parquet
 
