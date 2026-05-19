@@ -175,5 +175,7 @@ def load_script(name: str, path: Path) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load {path}")
     module = importlib.util.module_from_spec(spec)
+    # Required for @dataclass and other decorators on Python 3.12+ (Colab).
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
