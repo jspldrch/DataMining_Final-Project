@@ -86,4 +86,10 @@
 **Findings:** 12.3M rows validated; score_rate uniform 14.27%; regional score_mean 0.08–2.26; point corr tmp_range 0.17; 317 regions low pressure; 15-year window per region.
 **Doc:** `docs/07_LOCAL_EDA_ANALYSIS.md`, `outputs/regional/region_summary.csv`
 
-**Current Task:** Feature engineering notebook (`03_preprocessing.ipynb`) + baseline model (Colab).
+## Step 12: Weekly modeling layer in 04 (May 19, 2026)
+**Problem:** `04_modeling` built sliding windows on *daily* labeled rows (~1.3M samples) → Colab OOM (11/12 GB).
+**Why not fix in 03?** Preprocessing streams 12M rows; daily features/lags need the full panel. Kaggle targets are *weekly* (`pred_week1..5`).
+**Solution:** `scripts/weekly_model.py` — `daily_to_weekly()` (`ordinal // 7`, last label per bucket), vectorized windows, single region mask for holdout. **03 unchanged.**
+**Doc:** `docs/09_WEEKLY_MODELING.md`
+
+**Current Task:** Run `04_modeling.ipynb` on Colab after `git pull`; upload `submission_full.csv`.

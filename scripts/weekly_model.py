@@ -1,8 +1,12 @@
 """
 5-week disaster severity prediction (Kaggle format).
 
-Task: after 91 days of weather per region, predict scores for the next 5 weeks.
-Submission columns: pred_week1 .. pred_week5 (one row per region).
+Why weekly aggregation in 04 (not in 03)?
+- 03 writes *daily* labeled rows (~782/region) with full weather+lags from the panel.
+- Kaggle asks for pred_week1..5 → targets are weekly; daily sliding windows explode RAM (~1.3M+ samples).
+- We collapse to one row per (region, ordinal//7) here so 03 stays streaming-safe and 04 matches the task.
+
+Submission: pred_week1..pred_week5, one row per region, MAE metric.
 """
 from __future__ import annotations
 
@@ -12,36 +16,104 @@ import numpy as np
 import pandas as pd
 
 WEEK_COLS = [f"pred_week{k}" for k in range(1, 6)]
+WEEK_BUCKET = 7  # ordinal days per bucket (matches ~7-day score rhythm in EDA)
 
 
 def clip_scores(arr: np.ndarray) -> np.ndarray:
     return np.clip(arr, 0.0, 5.0)
 
 
+def slim_for_modeling(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
+    """Keep only columns needed for modeling (lower RAM after parquet load)."""
+    cols = list(dict.fromkeys(feature_cols + ["score", "ordinal"]))
+    return df[[c for c in cols if c in df.columns]].copy()
+
+
+def daily_to_weekly(labeled: pd.DataFrame) -> pd.DataFrame:
+    """
+    One row per region per 7-day ordinal bucket (last labeled day in bucket).
+
+    Features come from that day (already computed on the full panel in 03).
+    """
+    df = labeled.sort_values(["region_id", "ordinal"])
+    df = df.assign(_week=df["ordinal"] // WEEK_BUCKET)
+    idx = df.groupby(["region_id", "_week"], sort=False)["ordinal"].idxmax()
+    weekly = df.loc[idx].drop(columns="_week")
+    return weekly.reset_index(drop=True)
+
+
+def _numeric_and_cat_cols(feature_cols: list[str]) -> tuple[list[str], list[str]]:
+    num = [c for c in feature_cols if c != "region_id"]
+    cat = ["region_id"] if "region_id" in feature_cols else []
+    return num, cat
+
+
+def _windows_from_weekly_group(
+    g: pd.DataFrame,
+    num_cols: list[str],
+) -> tuple[np.ndarray, np.ndarray] | tuple[None, None]:
+    """Per region: X[i] → scores at weeks i+1..i+5. Returns float32 arrays."""
+    g = g.sort_values("ordinal")
+    n = len(g)
+    if n < 6:
+        return None, None
+    X_num = g[num_cols].to_numpy(dtype=np.float32)
+    scores = g["score"].to_numpy(dtype=np.float32)
+    n_win = n - 5
+    # y[j] = scores[j+1 : j+6]
+    y_out = np.lib.stride_tricks.sliding_window_view(scores[1:], 5)[:n_win]
+    X_out = X_num[:n_win]
+    return X_out, y_out
+
+
+def _assemble_X(
+    X_num: np.ndarray,
+    regions: list,
+    num_cols: list[str],
+    cat_cols: list[str],
+) -> pd.DataFrame:
+    X_df = pd.DataFrame(X_num, columns=num_cols)
+    if cat_cols:
+        X_df["region_id"] = pd.Categorical(regions)
+    return X_df
+
+
 def build_sliding_samples(
     labeled: pd.DataFrame,
     feature_cols: list[str],
+    *,
+    already_weekly: bool = False,
 ) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
     """
-    From weekly labeled rows: X at week i → y = scores at weeks i+1..i+5.
-    Returns X_df, y (n, 5), meta with region_id.
+    From weekly rows: feature vector at week i → y = scores at weeks i+1..i+5.
     """
-    xs, ys, meta = [], [], []
-    for region, g in labeled.groupby("region_id", sort=False):
-        g = g.sort_values("ordinal")
-        if len(g) < 6:
+    w = labeled if already_weekly else daily_to_weekly(labeled)
+    num_cols, cat_cols = _numeric_and_cat_cols(feature_cols)
+
+    X_parts: list[np.ndarray] = []
+    y_parts: list[np.ndarray] = []
+    regions: list = []
+    meta_rows: list[dict] = []
+
+    for region, g in w.groupby("region_id", sort=False):
+        X_out, y_out = _windows_from_weekly_group(g, num_cols)
+        if X_out is None:
             continue
-        for i in range(len(g) - 5):
-            xs.append(g.iloc[i][feature_cols])
-            ys.append(g.iloc[i + 1 : i + 6]["score"].to_numpy(dtype=float))
-            meta.append({"region_id": region, "anchor_ordinal": int(g.iloc[i]["ordinal"])})
+        n_win = len(y_out)
+        X_parts.append(X_out)
+        y_parts.append(y_out)
+        regions.extend([region] * n_win)
+        ordinals = g.sort_values("ordinal")["ordinal"].to_numpy()
+        for j in range(n_win):
+            meta_rows.append({"region_id": region, "anchor_ordinal": int(ordinals[j])})
 
-    if not xs:
-        raise ValueError("Keine Sliding-Window-Samples — train_labeled zu klein?")
+    if not X_parts:
+        raise ValueError("Keine Sliding-Window-Samples — zu wenig Wochen pro Region?")
 
-    X_df = pd.DataFrame(xs).reset_index(drop=True)
-    X_df["region_id"] = X_df["region_id"].astype("category")
-    return X_df, np.vstack(ys), pd.DataFrame(meta)
+    X_num = np.vstack(X_parts)
+    y_all = np.vstack(y_parts)
+    X_df = _assemble_X(X_num, regions, num_cols, cat_cols)
+    return X_df, y_all, pd.DataFrame(meta_rows)
 
 
 def build_region_holdout(
@@ -51,43 +123,61 @@ def build_region_holdout(
     seed: int = 42,
 ) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, list[str]]:
     """
-    Train: sliding windows on train regions.
-    Val: last 5 weekly scores per held-out region (Kaggle-style block).
+    Train: sliding windows on train regions (weekly rows).
+    Val: last 5 weekly scores per held-out region (one feature row each).
     """
-    regions = sorted(labeled["region_id"].unique())
+    w = daily_to_weekly(labeled)
+    regions = sorted(w["region_id"].unique())
     rng = np.random.default_rng(seed)
     n_val = max(1, int(len(regions) * val_region_frac))
     val_regions = set(rng.choice(regions, size=n_val, replace=False))
-    train_regions = [r for r in regions if r not in val_regions]
 
-    tr_parts = [labeled[labeled["region_id"] == r] for r in train_regions]
-    train_sub = pd.concat(tr_parts, ignore_index=True) if tr_parts else labeled.iloc[0:0]
-    X_tr, y_tr, _ = build_sliding_samples(train_sub, feature_cols)
+    train_sub = w[~w["region_id"].isin(val_regions)]
+    X_tr, y_tr, _ = build_sliding_samples(train_sub, feature_cols, already_weekly=True)
 
-    vx, vy, v_regions = [], [], []
-    for region in val_regions:
-        g = labeled[labeled["region_id"] == region].sort_values("ordinal")
+    num_cols, cat_cols = _numeric_and_cat_cols(feature_cols)
+    vx_num: list[np.ndarray] = []
+    vy: list[np.ndarray] = []
+    v_regions: list = []
+
+    val_sorted = sorted(val_regions)
+    for region in val_sorted:
+        g = w.loc[w["region_id"] == region].sort_values("ordinal")
         if len(g) < 6:
             continue
-        vx.append(g.iloc[-6][feature_cols])
-        vy.append(g.iloc[-5:]["score"].to_numpy(dtype=float))
+        vx_num.append(g.iloc[-6][num_cols].to_numpy(dtype=np.float32))
+        vy.append(g.iloc[-5:]["score"].to_numpy(dtype=np.float32))
         v_regions.append(region)
 
-    X_va = pd.DataFrame(vx).reset_index(drop=True)
-    X_va["region_id"] = X_va["region_id"].astype("category")
+    X_va = pd.DataFrame(np.vstack(vx_num), columns=num_cols)
+    if cat_cols:
+        X_va["region_id"] = pd.Categorical(v_regions)
     y_va = np.vstack(vy)
-    return X_tr, y_tr, X_va, y_va, sorted(val_regions)
+    return X_tr, y_tr, X_va, y_va, val_sorted
+
+
+def weekly_summary(daily_labeled: pd.DataFrame) -> dict:
+    """Diagnostics after daily_to_weekly (for notebook prints)."""
+    w = daily_to_weekly(daily_labeled)
+    per_region = w.groupby("region_id", sort=False).size()
+    return {
+        "daily_rows": len(daily_labeled),
+        "weekly_rows": len(w),
+        "regions": w["region_id"].nunique(),
+        "median_weeks_per_region": float(per_region.median()),
+    }
 
 
 def test_features_last_row(test_features: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
-    """One feature row per region: last day of the 91-day test window."""
+    """One feature row per region: last day of the 91-day test window (predict next 5 weeks)."""
     X = (
         test_features.sort_values(["region_id", "ordinal"])
         .groupby("region_id", sort=False)
         .tail(1)[feature_cols]
         .reset_index(drop=True)
     )
-    X["region_id"] = X["region_id"].astype("category")
+    if "region_id" in X.columns:
+        X["region_id"] = X["region_id"].astype("category")
     return X
 
 

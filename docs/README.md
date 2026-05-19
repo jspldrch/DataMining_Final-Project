@@ -12,6 +12,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 | **06** | [06_EDA_ANALYSIS.md](06_EDA_ANALYSIS.md) | **Gesamtfazit** EDA + Modell-Empfehlungen |
 | **07** | [07_LOCAL_EDA_ANALYSIS.md](07_LOCAL_EDA_ANALYSIS.md) | Regionale Details (Chunked-Vollbild, optional vertiefend) |
 | **08** | [08_PROGRESS_LOG.md](08_PROGRESS_LOG.md) | Chronik fürs Team – jederzeit nachschlagen |
+| **09** | [09_WEEKLY_MODELING.md](09_WEEKLY_MODELING.md) | Warum 04 täglich→wöchentlich aggregiert (RAM + Kaggle) |
 
 ## Kurz-Pfad je Ziel
 
@@ -27,7 +28,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 | 01 | `notebooks/01_exploration.ipynb` | 04, 05, 06 |
 | 02 | `notebooks/02_eda_analysis_local.ipynb` | 07 |
 | 03 | `03_preprocessing.ipynb` | 06 – Features → Parquet (Colab: Link im Notebook) |
-| 04 | `04_modeling.ipynb` | 06 – Baselines + LightGBM + Submission |
+| 04 | `04_modeling.ipynb` | 06, **09** – Baselines + LightGBM + Submission |
 
 ## Sonstiges
 
