@@ -29,5 +29,5 @@
 
 ## 5. Evaluation & Submission
 - **Metrics:** Identify the specific competition metric (likely RMSE or MAE).
-- **Submission Generation:** Format output to match `sample_submission.csv`.
+- [x] **Submission:** `pred_week1`–`pred_week5` pro Region (`resources/sample_submission.csv`)
 - **Final Review:** Ensure no overfitting to specific regions.
