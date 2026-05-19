@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (never commit large files)
+data/
+data-mining-2026-final-project/
+*.csv
+*.zip
+*.parquet
+
+# Agent / IDE
+GEMINI.md
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Optional: keep figures in repo; uncomment to ignore regenerated plots
+# outputs/figures/*.png
