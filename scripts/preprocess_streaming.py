@@ -65,12 +65,11 @@ class _ParquetAppender:
             self._writer = None
 
 
-def _process_region(
+def process_region_core(
     train_part: pd.DataFrame,
     test_part: pd.DataFrame,
-    train_writer: _ParquetAppender,
-    test_writer: _ParquetAppender,
-) -> None:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Feature engineering for one region (no I/O)."""
     train_part = train_part.copy()
     test_part = test_part.copy()
     train_part["_split"] = "train"
@@ -85,9 +84,21 @@ def _process_region(
     train_feat = panel[panel["_split"] == "train"]
     test_feat = panel[panel["_split"] == "test"]
     train_labeled = train_feat[train_feat["score"].notna()]
+    return (
+        train_labeled[_save_cols(train_labeled, labeled=True)],
+        test_feat[_save_cols(test_feat, labeled=False)],
+    )
 
-    train_writer.write(train_labeled[_save_cols(train_labeled, labeled=True)])
-    test_writer.write(test_feat[_save_cols(test_feat, labeled=False)])
+
+def _process_region(
+    train_part: pd.DataFrame,
+    test_part: pd.DataFrame,
+    train_writer: _ParquetAppender,
+    test_writer: _ParquetAppender,
+) -> None:
+    train_out, test_out = process_region_core(train_part, test_part)
+    train_writer.write(train_out)
+    test_writer.write(test_out)
 
 
 def preprocess_by_region(
@@ -110,10 +121,29 @@ def preprocess_by_region(
 
     train_writer = _ParquetAppender(out_train)
     test_writer = _ParquetAppender(out_test)
+    finished_regions: set[str] = set()
+    duplicate_test_skipped = 0
+
+    def _write_region(train_r: pd.DataFrame, region_key) -> None:
+        nonlocal duplicate_test_skipped
+        rid = str(region_key)
+        test_r = test_by_region.get(region_key, pd.DataFrame())
+        train_out, test_out = process_region_core(train_r, test_r)
+        if rid in finished_regions:
+            duplicate_test_skipped += 1
+            if not train_out.empty:
+                train_writer.write(train_out)
+            return
+        finished_regions.add(rid)
+        if not train_out.empty:
+            train_writer.write(train_out)
+        if not test_out.empty:
+            test_writer.write(test_out)
+        if len(finished_regions) % 200 == 0:
+            print(f"  … {len(finished_regions)} Regionen verarbeitet")
 
     buffer_parts: list[pd.DataFrame] = []
     current_region = None
-    n_regions = 0
 
     try:
         for chunk in pd.read_csv(train_path, chunksize=chunk_size):
@@ -128,22 +158,14 @@ def preprocess_by_region(
                     buffer_parts.append(g)
                     continue
 
-                # Region wechsel → vorherige Region ist vollständig (sortierte Datei)
                 train_r = pd.concat(buffer_parts, ignore_index=True)
-                test_r = test_by_region.get(current_region, pd.DataFrame())
-                _process_region(train_r, test_r, train_writer, test_writer)
-                n_regions += 1
-                if n_regions % 200 == 0:
-                    print(f"  … {n_regions} Regionen verarbeitet")
-
+                _write_region(train_r, current_region)
                 current_region = region
                 buffer_parts = [g]
 
         if current_region is not None and buffer_parts:
             train_r = pd.concat(buffer_parts, ignore_index=True)
-            test_r = test_by_region.get(current_region, pd.DataFrame())
-            _process_region(train_r, test_r, train_writer, test_writer)
-            n_regions += 1
+            _write_region(train_r, current_region)
 
     finally:
         train_writer.close()
@@ -152,8 +174,15 @@ def preprocess_by_region(
     train_rows = pq.read_metadata(out_train).num_rows if out_train.exists() else 0
     test_rows = pq.read_metadata(out_test).num_rows if out_test.exists() else 0
 
+    if duplicate_test_skipped:
+        print(
+            f"  Hinweis: {duplicate_test_skipped} doppelte Region-Durchläufe "
+            "(test nur 1× geschrieben)."
+        )
+
     return {
-        "regions": n_regions,
+        "regions": len(finished_regions),
+        "duplicate_region_passes": duplicate_test_skipped,
         "train_labeled_rows": train_rows,
         "test_rows": test_rows,
         "out_train": out_train,

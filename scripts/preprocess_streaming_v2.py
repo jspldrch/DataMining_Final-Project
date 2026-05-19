@@ -130,16 +130,38 @@ def preprocess_by_region_v2(
 
     train_writer = _ParquetAppender(out_train)
     test_writer = _ParquetAppender(out_test)
-    n_regions = 0
+    finished_regions: set[str] = set()
+    duplicate_test_skipped = 0
 
     def _consume(result: tuple[pd.DataFrame, pd.DataFrame]) -> None:
-        nonlocal n_regions
+        nonlocal duplicate_test_skipped
         train_out, test_out = result
-        train_writer.write(train_out)
-        test_writer.write(test_out)
-        n_regions += 1
-        if n_regions % 200 == 0:
-            print(f"  … {n_regions} Regionen verarbeitet")
+        if train_out.empty and test_out.empty:
+            return
+
+        rid = str(
+            test_out["region_id"].iloc[0]
+            if not test_out.empty
+            else train_out["region_id"].iloc[0]
+        )
+
+        # train.csv can have the same region_id in two non-contiguous blocks (unsorted
+        # file). We still append train labels from each block, but test must be written
+        # only once per region (91 rows) — otherwise Kaggle features are duplicated.
+        if rid in finished_regions:
+            duplicate_test_skipped += 1
+            if not train_out.empty:
+                train_writer.write(train_out)
+            return
+
+        finished_regions.add(rid)
+        if not train_out.empty:
+            train_writer.write(train_out)
+        if not test_out.empty:
+            test_writer.write(test_out)
+
+        if len(finished_regions) % 200 == 0:
+            print(f"  … {len(finished_regions)} Regionen verarbeitet")
 
     try:
         tasks = _iter_region_tasks(train_path, test_by_region, region_stats, chunk_size)
@@ -156,9 +178,16 @@ def preprocess_by_region_v2(
     train_rows = pq.read_metadata(out_train).num_rows if out_train.exists() else 0
     test_rows = pq.read_metadata(out_test).num_rows if out_test.exists() else 0
 
+    if duplicate_test_skipped:
+        print(
+            f"  Hinweis: {duplicate_test_skipped} doppelte Region-Durchläufe "
+            "(test nur 1× geschrieben). train.csv ggf. nach region_id sortieren."
+        )
+
     return {
         "version": 2,
-        "regions": n_regions,
+        "regions": len(finished_regions),
+        "duplicate_region_passes": duplicate_test_skipped,
         "train_labeled_rows": train_rows,
         "test_rows": test_rows,
         "out_train": out_train,

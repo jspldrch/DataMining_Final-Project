@@ -59,6 +59,8 @@ Outputs liegen weiter unter `outputs/processed/` (lokal) bzw. Drive (Colab).
 
 Colab: Zelle 2 kopiert CSVs nach `/content/` (größerer Speedup als nur Pro).
 
+**Hinweis:** Wenn `train.csv` pro `region_id` in **zwei getrennten Blöcken** vorkommt (nicht sortiert), schreibt v2 `test` nur **einmal** pro Region (`regions` sollte **2.248** sein, nicht 4.496).
+
 ## Wann 03 neu laufen?
 
 | Situation | Aktion |
