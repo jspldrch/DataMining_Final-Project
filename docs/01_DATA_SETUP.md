@@ -1,5 +1,7 @@
 # Daten-Setup
 
+> **Dokumentation Nr. 01** · [Lesereihenfolge](README.md)
+
 Die Rohdaten werden **nicht** im Git-Repository versioniert (zu groß).
 
 ## Benötigte Dateien
@@ -49,6 +51,8 @@ cp data-mining-2026-final-project/data/*.csv data/
 ```
 
 ## Google Colab
+
+Details: **[02_COLAB_SETUP.md](02_COLAB_SETUP.md)**
 
 1. `train.csv` und `test.csv` auf Google Drive hochladen, z. B.  
    `MyDrive/DataMining/data/`

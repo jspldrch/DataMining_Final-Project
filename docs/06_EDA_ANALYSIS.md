@@ -1,6 +1,14 @@
 # EDA-Analyse – Weather Forecasting (Data Mining Final Project)
 
-*Auswertung von `01_exploration.ipynb` (lokal, 10k-Sample) ergänzt um validierte Kennzahlen des vollen `train.csv`.*
+> **Dokumentation Nr. 06** · [Lesereihenfolge](README.md)
+
+*Gesamtfazit & Modell-Empfehlungen*
+
+**Detaildokumente (Referenz):**
+- Train: [04_TRAIN_DATA_ANALYSIS.md](04_TRAIN_DATA_ANALYSIS.md)
+- Test: [05_TEST_DATA_ANALYSIS.md](05_TEST_DATA_ANALYSIS.md)
+
+*Basis: `01_exploration.ipynb` + chunkweise Vollanalyse*
 
 ---
 

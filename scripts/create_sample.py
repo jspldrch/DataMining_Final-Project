@@ -22,7 +22,7 @@ def main() -> None:
     print(f"Reading first {NROWS:,} rows from {INPUT_PATH}...")
     if not INPUT_PATH.exists():
         print(f"Error: {INPUT_PATH} not found.")
-        print("Place train.csv in data/ (see docs/DATA_SETUP.md).")
+        print("Place train.csv in data/ (see docs/01_DATA_SETUP.md).")
         sys.exit(1)
 
     df_sample = pd.read_csv(INPUT_PATH, nrows=NROWS)

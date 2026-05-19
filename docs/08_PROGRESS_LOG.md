@@ -1,5 +1,7 @@
 # Data Mining Final Project - Progress Log
 
+> **Dokumentation Nr. 08** · [Lesereihenfolge](README.md) · laufendes Team-Tagebuch (nicht zwingend linear lesen)
+
 *This document tracks our chronological steps, decisions, and findings for the project presentation.*
 
 ## Step 1: Environment Setup & Strategy (May 19, 2026)
@@ -56,13 +58,13 @@
 **Implications:** Massive semi-supervised setup; `score` is sparse but evenly distributed across regions. Sample (10k) showed ~14% labeled — matches full data.
 
 ## Step 7: EDA Analysis Document (May 19, 2026)
-**Action:** Wrote `EDA_ANALYSIS.md` – full interpretation of notebook results + full-dataset stats.
+**Action:** Wrote `06_EDA_ANALYSIS.md` – full interpretation of notebook results + full-dataset stats.
 **Covers:** score rhythm (7-day), zero-inflation, correlations, lags/rolling, extremes, train-test shift, modeling recommendations.
 
 ## Step 8: Repository Restructure (May 19, 2026)
 **Goal:** Cleaner layout for team collaboration.
 **Action:**
-- `docs/` – PROJECT_PLAN, PROGRESS_LOG, EDA_ANALYSIS, DATA_SETUP, presentation/
+- `docs/` – nummeriert `01_`–`08_`, siehe `docs/README.md`, presentation/
 - `notebooks/` – numbered notebooks
 - `scripts/` – create_sample.py
 - `config/paths.py` – shared local/Colab paths
@@ -70,4 +72,18 @@
 - `outputs/figures/` – EDA plots
 - README.md, CONTRIBUTING.md
 
-**Current Task:** Feature engineering notebook (`02_preprocessing.ipynb`) + baseline model (Colab).
+## Step 9: Test-Set Analysis (May 19, 2026)
+**Goal:** Investigate suspicious values in `test.csv`.
+**Findings:** Synthetic years (3020–58063), string-sort date trap, 91 rows/region, test always after train per region; 6.7k low surf_pre rows, 3 extreme cold rows; no nulls/duplicates/logic errors.
+**Doc:** `docs/05_TEST_DATA_ANALYSIS.md`
+
+## Step 10: Train Analysis Reference Doc (May 19, 2026)
+**Action:** Created `docs/04_TRAIN_DATA_ANALYSIS.md` – canonical summary of all train findings (full + sample).
+**Links:** `06_EDA_ANALYSIS.md` now points to Train/Test reference docs.
+
+## Step 11: Local Chunked EDA Complete (May 19, 2026)
+**Source:** `02_eda_analysis_local.ipynb` MODE=chunked, 62 chunks, ~2 min.
+**Findings:** 12.3M rows validated; score_rate uniform 14.27%; regional score_mean 0.08–2.26; point corr tmp_range 0.17; 317 regions low pressure; 15-year window per region.
+**Doc:** `docs/07_LOCAL_EDA_ANALYSIS.md`, `outputs/regional/region_summary.csv`
+
+**Current Task:** Feature engineering notebook (`03_preprocessing.ipynb`) + baseline model (Colab).

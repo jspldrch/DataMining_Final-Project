@@ -1,5 +1,7 @@
 # Data Mining Final Project - Weather Forecasting Plan
 
+> **Dokumentation Nr. 03** · [Lesereihenfolge](README.md)
+
 ## 1. Setup & Environment
 - [x] Initialize `.gitignore` and `requirements.txt`.
 - [x] Setup local `venv` for code preparation.
@@ -12,22 +14,18 @@
 - **Regional Analysis:** Distribution of scores across different `region_id`s.
 - **Feature Correlations:** Relationship between temperature, wind, humidity, and the target score.
 - **Seasonality:** Identify weekly or yearly patterns.
-- [x] Run notebook locally; analysis documented in `EDA_ANALYSIS.md`.
+- [x] Run notebook locally; analysis documented in `06_EDA_ANALYSIS.md`.
 - [ ] Run notebook in Colab and validate correlations on full data.
 
 ## 3. Data Preprocessing & Feature Engineering
-- **Handle Missing Values:** Imputation based on regional averages or linear interpolation.
-- **Time-Series Features:**
-    - Lag features (e.g., weather from 7, 14, 21 days ago).
-    - Rolling window statistics (mean, std, max of the last week).
-    - Seasonal decomposition (extracting trends and residuals).
-- **Encoding:** Proper handling of `region_id` (Target encoding or Embedding).
+- [x] `notebooks/03_preprocessing.ipynb` + `scripts/features.py`
+- [x] Lags (1,3,7,14,21), Rolling (7,14), Kalender sin/cos
+- [x] Train+Test Panel für Lags; Output: `outputs/processed/*.parquet`
 
 ## 4. Modeling (The "Google Colab" Phase)
-- **Baseline:** Simple linear regression or persistence model (last week = next week).
-- **Primary Model:** LightGBM (preferred for speed/memory efficiency on 1.1GB data) or XGBoost.
-- **Cross-Validation:** Time-Series Cross-Validation (Walk-forward) to prevent data leakage.
-- **Hyperparameter Tuning:** Optuna for efficient search.
+- [x] `notebooks/04_modeling.ipynb` – Baselines + LightGBM + Submission
+- [ ] Time-Series CV mit 7-Tage-Gap (aktuell: regionaler Zeit-Split 80/20)
+- [ ] Hyperparameter Tuning (Optuna)
 
 ## 5. Evaluation & Submission
 - **Metrics:** Identify the specific competition metric (likely RMSE or MAE).

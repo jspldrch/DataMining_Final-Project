@@ -8,3 +8,4 @@ xgboost
 ipykernel
 notebook
 tqdm
+pyarrow
