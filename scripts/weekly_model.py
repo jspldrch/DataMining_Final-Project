@@ -15,6 +15,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.parallel_util import default_workers, run_parallel_map
+
 WEEK_COLS = [f"pred_week{k}" for k in range(1, 6)]
 WEEK_BUCKET = 7  # ordinal days per bucket (matches ~7-day score rhythm in EDA)
 
@@ -78,34 +80,38 @@ def _assemble_X(
     return X_df
 
 
-def build_sliding_samples(
-    labeled: pd.DataFrame,
-    feature_cols: list[str],
-    *,
-    already_weekly: bool = False,
-) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
-    """
-    From weekly rows: feature vector at week i → y = scores at weeks i+1..i+5.
-    """
-    w = labeled if already_weekly else daily_to_weekly(labeled)
-    num_cols, cat_cols = _numeric_and_cat_cols(feature_cols)
+def _sliding_region_worker(
+    args: tuple[object, pd.DataFrame, list[str]],
+) -> tuple[np.ndarray, np.ndarray, object, list[dict]] | None:
+    region, g, num_cols = args
+    X_out, y_out = _windows_from_weekly_group(g, num_cols)
+    if X_out is None:
+        return None
+    n_win = len(y_out)
+    ordinals = g["ordinal"].to_numpy()
+    meta = [{"region_id": region, "anchor_ordinal": int(ordinals[j])} for j in range(n_win)]
+    return X_out, y_out, region, meta
 
+
+def _collect_sliding_results(
+    results: list,
+    num_cols: list[str],
+    cat_cols: list[str],
+) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
     X_parts: list[np.ndarray] = []
     y_parts: list[np.ndarray] = []
     regions: list = []
     meta_rows: list[dict] = []
 
-    for region, g in w.groupby("region_id", sort=False):
-        X_out, y_out = _windows_from_weekly_group(g, num_cols)
-        if X_out is None:
+    for item in results:
+        if item is None:
             continue
+        X_out, y_out, region, meta = item
         n_win = len(y_out)
         X_parts.append(X_out)
         y_parts.append(y_out)
         regions.extend([region] * n_win)
-        ordinals = g.sort_values("ordinal")["ordinal"].to_numpy()
-        for j in range(n_win):
-            meta_rows.append({"region_id": region, "anchor_ordinal": int(ordinals[j])})
+        meta_rows.extend(meta)
 
     if not X_parts:
         raise ValueError("Keine Sliding-Window-Samples — zu wenig Wochen pro Region?")
@@ -116,11 +122,36 @@ def build_sliding_samples(
     return X_df, y_all, pd.DataFrame(meta_rows)
 
 
+def build_sliding_samples(
+    labeled: pd.DataFrame,
+    feature_cols: list[str],
+    *,
+    already_weekly: bool = False,
+    n_workers: int | None = None,
+) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
+    """
+    From weekly rows: feature vector at week i → y = scores at weeks i+1..i+5.
+    """
+    w = labeled if already_weekly else daily_to_weekly(labeled)
+    num_cols, cat_cols = _numeric_and_cat_cols(feature_cols)
+    n_workers = n_workers if n_workers is not None else default_workers()
+
+    groups = [(r, g.sort_values("ordinal"), num_cols) for r, g in w.groupby("region_id", sort=False)]
+
+    if n_workers <= 1:
+        results = [_sliding_region_worker(t) for t in groups]
+    else:
+        results = run_parallel_map(_sliding_region_worker, groups, n_workers=n_workers)
+
+    return _collect_sliding_results(results, num_cols, cat_cols)
+
+
 def build_region_holdout(
     labeled: pd.DataFrame,
     feature_cols: list[str],
     val_region_frac: float = 0.2,
     seed: int = 42,
+    n_workers: int | None = None,
 ) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, list[str]]:
     """
     Train: sliding windows on train regions (weekly rows).
@@ -133,7 +164,9 @@ def build_region_holdout(
     val_regions = set(rng.choice(regions, size=n_val, replace=False))
 
     train_sub = w[~w["region_id"].isin(val_regions)]
-    X_tr, y_tr, _ = build_sliding_samples(train_sub, feature_cols, already_weekly=True)
+    X_tr, y_tr, _ = build_sliding_samples(
+        train_sub, feature_cols, already_weekly=True, n_workers=n_workers
+    )
 
     num_cols, cat_cols = _numeric_and_cat_cols(feature_cols)
     vx_num: list[np.ndarray] = []

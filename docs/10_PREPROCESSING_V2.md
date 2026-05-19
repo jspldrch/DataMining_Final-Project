@@ -49,6 +49,16 @@ Pro Region, aus rohem `test.csv`:
 Gleiches Setup wie 03 (`scripts/notebook_init.setup()`).  
 Outputs liegen weiter unter `outputs/processed/` (lokal) bzw. Drive (Colab).
 
+## Parallelisierung (03b / 04b)
+
+| Stelle | Was |
+|--------|-----|
+| **03b** | Regionen parallel (`ProcessPoolExecutor`, Standard ≈ CPU−1) |
+| **04b** | Sliding-Fenster pro Region parallel; 5 Wochen-Modelle parallel in Validierung |
+| **Steuerung** | `export DM_WORKERS=4` oder `DM_WORKERS=1` (aus) |
+
+Colab: Zelle 2 kopiert CSVs nach `/content/` (größerer Speedup als nur Pro).
+
 ## Wann 03 neu laufen?
 
 | Situation | Aktion |

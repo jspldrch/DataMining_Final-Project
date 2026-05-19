@@ -98,4 +98,7 @@
 ## Step 14: Preprocessing v2 (separate track) (May 19, 2026)
 **Action:** `03b_preprocessing_v2.ipynb`, `features_v2.py`, `preprocess_streaming_v2.py`, `docs/10_PREPROCESSING_V2.md`, `04b_modeling_v2.ipynb` — v1 unchanged for ablation; v2 adds score lags, region stats, test91 aggregates.
 
-**Current Task:** Run **03b** (full) → **04b** → Kaggle `submission_full_v2.csv`; compare MAE to v1 (0.91).
+## Step 15: Parallel 03b / 04b (May 19, 2026)
+**Action:** `parallel_util.py`, region-parallel streaming v2, parallel sliding samples + 5-week LGBM; Colab `/content/` CSV copy in 03b.
+
+**Current Task:** `git pull` → **03b** → **04b** → Kaggle `submission_full_v2.csv`.
