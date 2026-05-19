@@ -107,9 +107,8 @@ def bootstrap(
                 link.unlink()
             elif link.exists() and not link.is_symlink():
                 pass  # keep existing local folder
-            else:
-                if not link.exists():
-                    link.symlink(drive_sub, target_is_directory=True)
+            elif not link.exists():
+                os.symlink(drive_sub, link, target_is_directory=True)
 
     train_path = data_dir / "train.csv"
     test_path = data_dir / "test.csv"
