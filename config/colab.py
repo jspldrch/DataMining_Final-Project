@@ -22,10 +22,27 @@ GITHUB_BRANCH = "main"
 COLAB_REPO_DIR = Path("/content/DataMining_Final-Project")
 
 # Nur CSVs liegen dauerhaft auf Drive (einmal hochladen)
-COLAB_DRIVE_DATA_DIR = Path("/content/drive/MyDrive/DataMining/data")
+COLAB_DRIVE_DATA_CANDIDATES = [
+    Path("/content/drive/MyDrive/DataMining/DataMining_Final-Project/data"),
+    Path("/content/drive/MyDrive/DataMining/data"),
+]
+COLAB_DRIVE_DATA_DIR = COLAB_DRIVE_DATA_CANDIDATES[0]
 
 # Optional: Outputs auf Drive behalten (Parquet, Submissions)
 COLAB_DRIVE_OUTPUTS_DIR = Path("/content/drive/MyDrive/DataMining/outputs")
+
+
+def resolve_drive_data_dir() -> Path:
+    """First Drive folder that contains train.csv."""
+    for path in COLAB_DRIVE_DATA_CANDIDATES:
+        if (path / "train.csv").exists() and (path / "test.csv").exists():
+            return path
+    tried = "\n".join(f"  - {p}" for p in COLAB_DRIVE_DATA_CANDIDATES)
+    raise FileNotFoundError(
+        f"train.csv / test.csv auf Drive nicht gefunden.\n"
+        f"Geprüft:\n{tried}\n"
+        "Lege CSVs in einen der Ordner (nur einmal nötig)."
+    )
 
 
 def _run(cmd: list[str], cwd: Path | None = None) -> None:
@@ -35,7 +52,7 @@ def _run(cmd: list[str], cwd: Path | None = None) -> None:
 def bootstrap(
     repo_url: str = GITHUB_REPO_URL,
     branch: str = GITHUB_BRANCH,
-    drive_data_dir: Path = COLAB_DRIVE_DATA_DIR,
+    drive_data_dir: Path | None = None,
     link_outputs_to_drive: bool = True,
     install_requirements: bool = True,
 ) -> dict:
@@ -75,14 +92,7 @@ def bootstrap(
         print("pip install …")
         _run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], cwd=repo_dir)
 
-    data_dir = drive_data_dir
-    if not (data_dir / "train.csv").exists():
-        raise FileNotFoundError(
-            f"train.csv nicht gefunden: {data_dir}\n"
-            "Einmalig auf Drive hochladen:\n"
-            "  MyDrive/DataMining/data/train.csv\n"
-            "  MyDrive/DataMining/data/test.csv"
-        )
+    data_dir = drive_data_dir or resolve_drive_data_dir()
 
     project_outputs = repo_dir / "outputs"
     project_outputs.mkdir(parents=True, exist_ok=True)
