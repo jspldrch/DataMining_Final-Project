@@ -47,11 +47,12 @@ jupyter notebook notebooks/02_eda_analysis_local.ipynb
 
 | | Lokal | Colab |
 |---|--------|--------|
-| Code | Git / lokaler Clone | `git clone` / `git pull` → `/content/DataMining_Final-Project` |
-| Train/Test CSV | `data/` im Repo-Ordner | **nur** auf Drive: `MyDrive/DataMining/data/` |
-| Start | `01_exploration` | **03** → **04** (je [Open in Colab](docs/02_COLAB_SETUP.md)) |
+| Code | Repo-Clone | `git pull` → `/content/DataMining_Final-Project` |
+| Train/Test CSV | `data/train.csv`, `data/test.csv` | **gleiche Dateien** auf Drive |
+| Outputs | `outputs/processed/`, `outputs/submissions/` | `MyDrive/.../outputs/` |
+| Notebooks 03–04 | `setup()` in Zelle 1 | **identische Zellen** |
 
-Siehe [docs/02_COLAB_SETUP.md](docs/02_COLAB_SETUP.md) — Zelle 1 macht `git pull` + Drive-Pfade.
+Siehe [docs/02_COLAB_SETUP.md](docs/02_COLAB_SETUP.md).
 
 ## Dokumentation
 

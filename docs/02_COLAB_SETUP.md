@@ -4,11 +4,13 @@
 
 ## Kurz
 
-| Was | Wo |
-|-----|-----|
-| Notebooks öffnen | **GitHub → Open in Colab** (Links in 03 & 04) |
-| Python-Code (`scripts/`) | `git pull` in Zelle 1 (automatisch) |
-| `train.csv`, `test.csv` | **einmalig** auf Drive |
+| Was | Lokal | Colab |
+|-----|--------|--------|
+| Code | Repo-Clone | `git pull` → `/content/DataMining_Final-Project` |
+| `train.csv`, `test.csv` | `data/` im Projekt | **dieselben Dateien** auf Drive |
+| Outputs | `outputs/` | `MyDrive/.../outputs/` |
+
+Setup in **03** und **04**: eine Zelle `from scripts.notebook_init import setup` → `env = setup()` (siehe `scripts/project_env.py`).
 
 ```
 MyDrive/DataMining/DataMining_Final-Project/
@@ -20,6 +22,8 @@ MyDrive/DataMining/DataMining_Final-Project/
     └── submissions/
 ```
 
+Lokal dieselbe Struktur unter dem Repo-Root.
+
 ---
 
 ## Ablauf
@@ -27,14 +31,9 @@ MyDrive/DataMining/DataMining_Final-Project/
 1. [03_preprocessing.ipynb](https://colab.research.google.com/github/jspldrch/DataMining_Final-Project/blob/main/notebooks/03_preprocessing.ipynb) → **Run all**
 2. [04_modeling.ipynb](https://colab.research.google.com/github/jspldrch/DataMining_Final-Project/blob/main/notebooks/04_modeling.ipynb) → **Run all**
 
-Jedes Notebook macht in **Zelle 1** automatisch:
+Zelle 1 macht automatisch: `drive.mount()` · `git clone`/`pull` · `pip install` · Pfade (Drive-Daten, Drive-Outputs).
 
-- `drive.mount()`
-- `git clone` / `git pull` → `/content/DataMining_Final-Project`
-- `pip install -r requirements.txt`
-- Pfade zu CSVs auf Drive
-
-**Kein** separates Bootstrap-Notebook, **kein** manuelles Hochladen von `scripts/`.
+**Kein** manuelles Hochladen von `scripts/`. Lokal: dieselbe Zelle, Daten aus `data/`.
 
 ---
 

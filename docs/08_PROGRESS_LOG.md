@@ -92,4 +92,10 @@
 **Solution:** `scripts/weekly_model.py` — `daily_to_weekly()` (`ordinal // 7`, last label per bucket), vectorized windows, single region mask for holdout. **03 unchanged.**
 **Doc:** `docs/09_WEEKLY_MODELING.md`
 
-**Current Task:** Run `04_modeling.ipynb` on Colab after `git pull`; upload `submission_full.csv`.
+## Step 13: Unified local + Colab env (May 19, 2026)
+**Action:** `scripts/project_env.py` + `scripts/notebook_init.setup()` — same MODE/pipeline; only paths differ (repo `data/` vs Drive, `outputs/` vs Drive outputs). Notebooks 03/04 rewritten to one setup cell.
+
+## Step 14: Preprocessing v2 (separate track) (May 19, 2026)
+**Action:** `03b_preprocessing_v2.ipynb`, `features_v2.py`, `preprocess_streaming_v2.py`, `docs/10_PREPROCESSING_V2.md`, `04b_modeling_v2.ipynb` — v1 unchanged for ablation; v2 adds score lags, region stats, test91 aggregates.
+
+**Current Task:** Run **03b** (full) → **04b** → Kaggle `submission_full_v2.csv`; compare MAE to v1 (0.91).

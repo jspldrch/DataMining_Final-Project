@@ -1,6 +1,6 @@
 # Dokumentation – Lesereihenfolge
 
-Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihenfolge lesen (außer `08`, das ist ein laufendes Team-Tagebuch).
+Alle Analyse-Dokumente sind mit **`01_` … `10_`** nummeriert. In dieser Reihenfolge lesen (außer `08`, das ist ein laufendes Team-Tagebuch).
 
 | Nr. | Datei | Wann lesen |
 |-----|--------|------------|
@@ -13,6 +13,7 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 | **07** | [07_LOCAL_EDA_ANALYSIS.md](07_LOCAL_EDA_ANALYSIS.md) | Regionale Details (Chunked-Vollbild, optional vertiefend) |
 | **08** | [08_PROGRESS_LOG.md](08_PROGRESS_LOG.md) | Chronik fürs Team – jederzeit nachschlagen |
 | **09** | [09_WEEKLY_MODELING.md](09_WEEKLY_MODELING.md) | Warum 04 täglich→wöchentlich aggregiert (RAM + Kaggle) |
+| **10** | [10_PREPROCESSING_V2.md](10_PREPROCESSING_V2.md) | Preprocessing v2 vs. v1 (03b / 04b) |
 
 ## Kurz-Pfad je Ziel
 
@@ -27,8 +28,10 @@ Alle Analyse-Dokumente sind mit **`01_` … `08_`** nummeriert. In dieser Reihen
 |-----|----------|----------------|
 | 01 | `notebooks/01_exploration.ipynb` | 04, 05, 06 |
 | 02 | `notebooks/02_eda_analysis_local.ipynb` | 07 |
-| 03 | `03_preprocessing.ipynb` | 06 – Features → Parquet (Colab: Link im Notebook) |
-| 04 | `04_modeling.ipynb` | 06, **09** – Baselines + LightGBM + Submission |
+| 03 | `03_preprocessing.ipynb` | 06 – Features v1 → Parquet |
+| **03b** | `03b_preprocessing_v2.ipynb` | **10** – erweiterte Features → `*_v2.parquet` |
+| 04 | `04_modeling.ipynb` | 06, 09 – Modell v1 |
+| **04b** | `04b_modeling_v2.ipynb` | **10** – Modell auf v2-Parquets |
 
 ## Sonstiges
 

@@ -1,100 +1,53 @@
 """
-Central path configuration for local development and Google Colab.
-
-Usage in notebooks:
-    from config.paths import setup_environment
-    env = setup_environment()
-    TRAIN_PATH = env["train_path"]
+Central path configuration — delegates to scripts.project_env (single source of truth).
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-# Project root (repo root)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-# Legacy competition folder name (still supported)
-LEGACY_DATA_DIR = PROJECT_ROOT / "data-mining-2026-final-project" / "data"
-CANONICAL_DATA_DIR = PROJECT_ROOT / "data"
-
-# Colab: first match with train.csv wins (see resolve_colab_data_dir)
+FIGURES_DIR = PROJECT_ROOT / "outputs" / "figures"
 COLAB_DATA_DIR = "/content/drive/MyDrive/DataMining/DataMining_Final-Project/data"
 COLAB_DATA_CANDIDATES = [
     "/content/drive/MyDrive/DataMining/DataMining_Final-Project/data",
     "/content/drive/MyDrive/DataMining/data",
 ]
-
-FIGURES_DIR = PROJECT_ROOT / "outputs" / "figures"
-
-
-def resolve_data_dir() -> Path:
-    """Return the first existing data directory (canonical or legacy)."""
-    if CANONICAL_DATA_DIR.exists():
-        return CANONICAL_DATA_DIR
-    if LEGACY_DATA_DIR.exists():
-        return LEGACY_DATA_DIR
-    return CANONICAL_DATA_DIR
-
-
-def resolve_colab_data_dir(project_root: Path | None = None) -> Path:
-    """Pick first Colab Drive path that contains train.csv."""
-    root = project_root or PROJECT_ROOT
-    candidates = [
-        str(root / "data"),
-        *COLAB_DATA_CANDIDATES,
-        str(CANONICAL_DATA_DIR),
-    ]
-    for raw in candidates:
-        path = Path(raw)
-        if (path / "train.csv").exists():
-            return path
-    return Path(COLAB_DATA_DIR)
+CANONICAL_DATA_DIR = PROJECT_ROOT / "data"
+LEGACY_DATA_DIR = PROJECT_ROOT / "data-mining-2026-final-project" / "data"
 
 
 def is_colab() -> bool:
-    try:
-        import google.colab  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    from scripts.project_env import is_colab as _is_colab
+    return _is_colab()
 
 
-def setup_environment() -> dict:
+def resolve_data_dir() -> Path:
+    from scripts.project_env import find_local_root, resolve_data_dir as _resolve
+    root = find_local_root() if not is_colab() else PROJECT_ROOT
+    return _resolve(root, colab=is_colab())
+
+
+def resolve_colab_data_dir(project_root: Path | None = None) -> Path:
+    from scripts.project_env import resolve_data_dir as _resolve
+    return _resolve(project_root or PROJECT_ROOT, colab=True)
+
+
+def setup_environment(*, install_deps: bool = False) -> dict:
     """
-    Detect environment and return paths + flags.
-
-    Returns dict with keys:
-        is_colab, data_dir, train_path, test_path, figures_dir,
-        use_chunked_train, chunk_size, env_label
+    For notebooks 01/02. Same data paths as 03/04; optional pip install.
     """
-    colab = is_colab()
-    figures_dir = FIGURES_DIR
-    figures_dir.mkdir(parents=True, exist_ok=True)
-
-    if colab:
-        data_dir = resolve_colab_data_dir()
-        train_path = data_dir / "train.csv"
-        test_path = data_dir / "test.csv"
-        use_chunked = True
-        env_label = "Colab (voller Trainingsdatensatz)"
-    else:
-        data_dir = resolve_data_dir()
-        sample_path = data_dir / "train_sample.csv"
-        full_path = data_dir / "train.csv"
-        train_path = sample_path if sample_path.exists() else full_path
-        test_path = data_dir / "test.csv"
-        use_chunked = False
-        env_label = "Lokal (train_sample.csv)" if sample_path.exists() else "Lokal (train.csv)"
-
+    from scripts.project_env import bootstrap_notebook
+    env = bootstrap_notebook(install_deps=install_deps)
     return {
-        "is_colab": colab,
-        "project_root": PROJECT_ROOT,
-        "data_dir": data_dir,
-        "train_path": train_path,
-        "test_path": test_path,
-        "figures_dir": figures_dir,
-        "use_chunked_train": use_chunked,
+        "is_colab": env["is_colab"],
+        "project_root": env["project_root"],
+        "data_dir": env["data_dir"],
+        "train_path": env["train_path"],
+        "test_path": env["test_path"],
+        "figures_dir": env["figures_dir"],
+        "use_chunked_train": env["mode"] == "full",
         "chunk_size": 500_000,
-        "env_label": env_label,
+        "env_label": f"{'Colab' if env['is_colab'] else 'Lokal'} ({env['mode']})",
+        "mode": env["mode"],
+        "outputs_dir": env["outputs_dir"],
     }

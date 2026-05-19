@@ -54,10 +54,10 @@ cp data-mining-2026-final-project/data/*.csv data/
 
 Details: **[02_COLAB_SETUP.md](02_COLAB_SETUP.md)**
 
-1. `train.csv` und `test.csv` auf Google Drive hochladen, z. B.  
-   `MyDrive/DataMining/data/`
-2. In `config/paths.py` ggf. `COLAB_DATA_DIR` anpassen
-3. Notebook in Colab öffnen: `notebooks/01_exploration.ipynb`
+1. **Dieselben** `train.csv` und `test.csv` auf Drive legen:  
+   `MyDrive/DataMining/DataMining_Final-Project/data/`
+2. Notebooks **03** / **04**: Zelle 1 `setup()` — gleiche Pipeline wie lokal (`scripts/project_env.py`)
+3. EDA optional: `01_exploration.ipynb`
 
 ## Symlink (macOS/Linux, optional)
 
