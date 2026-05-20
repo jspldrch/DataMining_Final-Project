@@ -145,8 +145,6 @@ def bootstrap_notebook(*, install_deps: bool = True) -> dict:
         from google.colab import drive
 
         drive.mount("/content/drive")
-        # Default single worker: ProcessPool + ~1.7M daily rows → Colab OOM.
-        os.environ.setdefault("DM_WORKERS", "1")
         project_root = git_clone_or_pull(COLAB_REPO_DIR)
         data_dir = resolve_data_dir(project_root, colab=True)
         outputs_dir = DRIVE_PROJECT_DIR / "outputs"
@@ -178,8 +176,6 @@ def bootstrap_notebook(*, install_deps: bool = True) -> dict:
     print(f"  Train:   {train_path} ({'OK' if train_path.exists() else 'FEHLT'})")
     print(f"  Test:    {test_path} ({'OK' if test_path.exists() else 'FEHLT'})")
     print(f"  Outputs: {outputs_dir}")
-    if colab:
-        print("  Colab RAM: DM_WORKERS=1 (Standard). Mehr Kerne: os.environ['DM_WORKERS']='4' vor setup().")
 
     if not train_path.exists() or not test_path.exists():
         raise FileNotFoundError("Train- oder Test-CSV fehlt — siehe Pfade oben.")
