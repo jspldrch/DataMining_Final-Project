@@ -20,15 +20,14 @@ WeekSpec = tuple[
 ]
 
 
-def labels_for_week(y: np.ndarray, week: int) -> pd.Series:
+def labels_for_week(y: np.ndarray, week: int) -> list[float]:
     """
-    LightGBM 4.x + sklearn: no column slices; prefer pandas Series (float64).
+    LightGBM 4.x: no ``y[:, week]`` slices (train *and* eval_set labels).
 
-    ``y[:, week]`` as ndarray often raises:
+    Plain ``list`` is accepted reliably; 2D ``y_va`` in eval_set causes:
     TypeError: Wrong type(ndarray) for label.
     """
-    col = np.asarray(y, dtype=np.float64)[:, week].reshape(-1)
-    return pd.Series(col, copy=False)
+    return np.asarray(y, dtype=np.float64)[:, week].ravel().tolist()
 
 
 def _fit_one_week(spec: WeekSpec) -> lgb.LGBMRegressor:
