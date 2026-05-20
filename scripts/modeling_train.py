@@ -20,6 +20,11 @@ WeekSpec = tuple[
 ]
 
 
+def _labels_1d(y: np.ndarray, week: int) -> np.ndarray:
+    """LightGBM needs contiguous 1-D labels (no ndarray column slices)."""
+    return np.ascontiguousarray(y[:, week], dtype=np.float32)
+
+
 def _fit_one_week(spec: WeekSpec) -> lgb.LGBMRegressor:
     week, X_tr, y_tr, X_va, y_va, params, categorical_feature, es_rounds = spec
     p = dict(params)
@@ -30,10 +35,10 @@ def _fit_one_week(spec: WeekSpec) -> lgb.LGBMRegressor:
     if categorical_feature:
         fit_kw["categorical_feature"] = categorical_feature
     if X_va is not None and len(X_va):
-        fit_kw["eval_set"] = [(X_va, y_va)]
+        fit_kw["eval_set"] = [(X_va, _labels_1d(y_va, week))]
         fit_kw["eval_metric"] = "mae"
         fit_kw["callbacks"] = [lgb.early_stopping(es_rounds, verbose=False)]
-    m.fit(X_tr, y_tr[:, week], **fit_kw)
+    m.fit(X_tr, _labels_1d(y_tr, week), **fit_kw)
     return m
 
 
@@ -46,7 +51,7 @@ def _fit_one_week_final(spec: WeekSpec) -> lgb.LGBMRegressor:
     fit_kw: dict = {}
     if categorical_feature:
         fit_kw["categorical_feature"] = categorical_feature
-    m.fit(X_tr, y_tr[:, week], **fit_kw)
+    m.fit(X_tr, _labels_1d(y_tr, week), **fit_kw)
     return m
 
 
@@ -65,6 +70,7 @@ def train_week_models_parallel(
     """Train weeks 0..4 in parallel (5 processes by default)."""
     from scripts.parallel_util import run_parallel_map
 
+    n_workers = min(n_workers, 5)
     fit_fn = _fit_one_week_final if final_fit else _fit_one_week
     specs: list[WeekSpec] = [
         (
@@ -79,4 +85,6 @@ def train_week_models_parallel(
         )
         for w in range(5)
     ]
-    return run_parallel_map(fit_fn, specs, n_workers=min(n_workers, 5))
+    if n_workers <= 1:
+        return [fit_fn(s) for s in specs]
+    return run_parallel_map(fit_fn, specs, n_workers=n_workers)
