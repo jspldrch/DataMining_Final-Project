@@ -20,9 +20,15 @@ WeekSpec = tuple[
 ]
 
 
-def _labels_1d(y: np.ndarray, week: int) -> np.ndarray:
-    """LightGBM needs contiguous 1-D labels (no ndarray column slices)."""
-    return np.ascontiguousarray(y[:, week], dtype=np.float32)
+def labels_for_week(y: np.ndarray, week: int) -> pd.Series:
+    """
+    LightGBM 4.x + sklearn: no column slices; prefer pandas Series (float64).
+
+    ``y[:, week]`` as ndarray often raises:
+    TypeError: Wrong type(ndarray) for label.
+    """
+    col = np.asarray(y, dtype=np.float64)[:, week].reshape(-1)
+    return pd.Series(col, copy=False)
 
 
 def _fit_one_week(spec: WeekSpec) -> lgb.LGBMRegressor:
@@ -35,10 +41,10 @@ def _fit_one_week(spec: WeekSpec) -> lgb.LGBMRegressor:
     if categorical_feature:
         fit_kw["categorical_feature"] = categorical_feature
     if X_va is not None and len(X_va):
-        fit_kw["eval_set"] = [(X_va, _labels_1d(y_va, week))]
+        fit_kw["eval_set"] = [(X_va, labels_for_week(y_va, week))]
         fit_kw["eval_metric"] = "mae"
         fit_kw["callbacks"] = [lgb.early_stopping(es_rounds, verbose=False)]
-    m.fit(X_tr, _labels_1d(y_tr, week), **fit_kw)
+    m.fit(X_tr, labels_for_week(y_tr, week), **fit_kw)
     return m
 
 
@@ -51,7 +57,7 @@ def _fit_one_week_final(spec: WeekSpec) -> lgb.LGBMRegressor:
     fit_kw: dict = {}
     if categorical_feature:
         fit_kw["categorical_feature"] = categorical_feature
-    m.fit(X_tr, _labels_1d(y_tr, week), **fit_kw)
+    m.fit(X_tr, labels_for_week(y_tr, week), **fit_kw)
     return m
 
 
