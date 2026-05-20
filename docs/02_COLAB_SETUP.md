@@ -56,5 +56,7 @@ In Colab: Notebook neu öffnen oder Zelle 1 erneut ausführen → `git pull` hol
 |---------|--------|
 | CSV nicht gefunden | `MyDrive/DataMining/DataMining_Final-Project/data/train.csv` prüfen |
 | RAM voll in 03 | Streaming läuft automatisch bei `MODE=full` |
+| RAM voll in 04/04b | Zelle 1 kopiert Parquet → `/content/`, aggregiert täglich→wöchentlich; Colab-Default `DM_WORKERS=1` |
+| Drive `Errno 107` | `read_parquet_notebook()` in Zelle 1 (automatisch) |
 | 04: Parquet fehlt | Zuerst 03 komplett durchlaufen |
 | Alter Code | Zelle 1 nochmal → `git pull` |

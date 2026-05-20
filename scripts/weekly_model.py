@@ -26,9 +26,15 @@ def clip_scores(arr: np.ndarray) -> np.ndarray:
 
 
 def slim_for_modeling(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
-    """Keep only columns needed for modeling (lower RAM after parquet load)."""
+    """Keep only model columns; numeric features as float32 (lower RAM)."""
     cols = list(dict.fromkeys(feature_cols + ["score", "ordinal"]))
-    return df[[c for c in cols if c in df.columns]].copy()
+    out = df[[c for c in cols if c in df.columns]].copy()
+    for c in out.columns:
+        if c == "region_id":
+            continue
+        if pd.api.types.is_numeric_dtype(out[c]):
+            out[c] = out[c].astype(np.float32)
+    return out
 
 
 def daily_to_weekly(labeled: pd.DataFrame) -> pd.DataFrame:
@@ -38,10 +44,9 @@ def daily_to_weekly(labeled: pd.DataFrame) -> pd.DataFrame:
     Features come from that day (already computed on the full panel in 03).
     """
     df = labeled.sort_values(["region_id", "ordinal"])
-    df = df.assign(_week=df["ordinal"] // WEEK_BUCKET)
-    idx = df.groupby(["region_id", "_week"], sort=False)["ordinal"].idxmax()
-    weekly = df.loc[idx].drop(columns="_week")
-    return weekly.reset_index(drop=True)
+    week = df["ordinal"].to_numpy(dtype=np.int32) // WEEK_BUCKET
+    idx = df.groupby([df["region_id"], week], sort=False)["ordinal"].idxmax()
+    return df.loc[idx].reset_index(drop=True)
 
 
 def _numeric_and_cat_cols(feature_cols: list[str]) -> tuple[list[str], list[str]]:
@@ -152,12 +157,16 @@ def build_region_holdout(
     val_region_frac: float = 0.2,
     seed: int = 42,
     n_workers: int | None = None,
+    *,
+    already_weekly: bool = False,
 ) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame, np.ndarray, list[str]]:
     """
     Train: sliding windows on train regions (weekly rows).
     Val: last 5 weekly scores per held-out region (one feature row each).
+
+    Pass *already_weekly=True* when *labeled* is from ``daily_to_weekly`` (saves RAM).
     """
-    w = daily_to_weekly(labeled)
+    w = labeled if already_weekly else daily_to_weekly(labeled)
     regions = sorted(w["region_id"].unique())
     rng = np.random.default_rng(seed)
     n_val = max(1, int(len(regions) * val_region_frac))
@@ -189,12 +198,18 @@ def build_region_holdout(
     return X_tr, y_tr, X_va, y_va, val_sorted
 
 
-def weekly_summary(daily_labeled: pd.DataFrame) -> dict:
-    """Diagnostics after daily_to_weekly (for notebook prints)."""
-    w = daily_to_weekly(daily_labeled)
+def weekly_summary(
+    labeled: pd.DataFrame,
+    *,
+    already_weekly: bool = False,
+    daily_rows: int | None = None,
+) -> dict:
+    """Diagnostics for notebook prints (daily → weekly collapse)."""
+    w = labeled if already_weekly else daily_to_weekly(labeled)
     per_region = w.groupby("region_id", sort=False).size()
+    n_daily = daily_rows if daily_rows is not None else len(labeled)
     return {
-        "daily_rows": len(daily_labeled),
+        "daily_rows": n_daily,
         "weekly_rows": len(w),
         "regions": w["region_id"].nunique(),
         "median_weeks_per_region": float(per_region.median()),

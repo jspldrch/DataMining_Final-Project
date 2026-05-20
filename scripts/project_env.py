@@ -100,6 +100,30 @@ def resolve_mode(data_dir: Path) -> str:
     raise FileNotFoundError(f"Weder train.csv noch train_sample.csv in {data_dir}")
 
 
+def read_parquet_notebook(path: Path) -> pd.DataFrame:
+    """
+    Load parquet for modeling notebooks.
+
+    Colab: copy to ``/content/`` first (stable vs. Drive FUSE, lower peak RAM on read).
+    """
+    import pandas as pd
+
+    src = Path(path)
+    if not src.exists():
+        raise FileNotFoundError(
+            f"{src} fehlt — zuerst Preprocessing-Notebook (03/03b) komplett ausführen."
+        )
+    if is_colab():
+        import shutil
+
+        local = Path("/content") / src.name
+        if not local.exists() or local.stat().st_mtime < src.stat().st_mtime:
+            print(f"Kopiere {src.name} → /content/ …")
+            shutil.copy(src, local)
+        src = local
+    return pd.read_parquet(src)
+
+
 def _pip_install(project_root: Path) -> None:
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "-r", str(project_root / "requirements.txt")],
@@ -119,7 +143,10 @@ def bootstrap_notebook(*, install_deps: bool = True) -> dict:
 
     if colab:
         from google.colab import drive
+
         drive.mount("/content/drive")
+        # Default single worker: ProcessPool + ~1.7M daily rows → Colab OOM.
+        os.environ.setdefault("DM_WORKERS", "1")
         project_root = git_clone_or_pull(COLAB_REPO_DIR)
         data_dir = resolve_data_dir(project_root, colab=True)
         outputs_dir = DRIVE_PROJECT_DIR / "outputs"
@@ -151,6 +178,8 @@ def bootstrap_notebook(*, install_deps: bool = True) -> dict:
     print(f"  Train:   {train_path} ({'OK' if train_path.exists() else 'FEHLT'})")
     print(f"  Test:    {test_path} ({'OK' if test_path.exists() else 'FEHLT'})")
     print(f"  Outputs: {outputs_dir}")
+    if colab:
+        print("  Colab RAM: DM_WORKERS=1 (Standard). Mehr Kerne: os.environ['DM_WORKERS']='4' vor setup().")
 
     if not train_path.exists() or not test_path.exists():
         raise FileNotFoundError("Train- oder Test-CSV fehlt — siehe Pfade oben.")
