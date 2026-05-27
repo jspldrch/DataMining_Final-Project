@@ -61,7 +61,7 @@ LAG_COLS = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre"]
 LAGS = [1, 3, 7, 14, 21]
 ROLL_COLS = ["prec", "wind", "tmp"]
 ROLL_WINS = [7, 14, 30, 60, 90]   # Verbesserung 1: 30/60/90 neu
-SCORE_LAGS = [7, 14, 21, 28, 35]  # Verbesserung 4
+SCORE_LAGS = []  # score lags removed: at test time all equal same forward-filled value
 
 LGB_PARAMS = dict(
     objective="regression",
@@ -118,7 +118,7 @@ def build_feature_list() -> list[str]:
         for stat in ("mean", "std", "max")
     ]
     calendar = ["month_sin", "month_cos", "day_sin", "day_cos"]
-    score_names = ["score_persist"] + [f"score_lag{lag}" for lag in SCORE_LAGS]
+    score_names = ["score_persist"]
     drought = ["prec_deficit_90d", "prec_trend_30d"]
     return WEATHER_COLS + lag_names + roll_names + calendar + score_names + drought
 
@@ -172,12 +172,9 @@ def compute_region_features(
     p30_std = prec_prior.rolling(30, min_periods=10).std().clip(lower=0.01)
     panel["prec_trend_30d"] = ((p7 - p30) / p30_std).astype(np.float32)
 
-    # Verbesserung 4: Score-Lags
-    # ffill: letzter bekannter Score aus Training propagiert in alle Test-Zeilen
+    # score_persist: letzter bekannter Dürre-Level (ffill in Test-Zeilen)
     score_filled = panel["score"].ffill()
     panel["score_persist"] = score_filled.shift(7).astype(np.float32)
-    for lag in SCORE_LAGS:
-        panel[f"score_lag{lag}"] = score_filled.shift(lag).astype(np.float32)
 
     n_tr = len(tr)
     return panel.iloc[:n_tr].copy(), panel.iloc[n_tr:].copy()
@@ -344,18 +341,21 @@ def main() -> None:
     print("\n[2/6] Feature Engineering (pro Region) ...")
     all_tr_feat, all_te_feat = [], []
     n = len(regions)
+    train_by_region = {r: g.reset_index(drop=True) for r, g in train_raw.groupby("region_id", sort=False)}
+    test_by_region  = {r: g.reset_index(drop=True) for r, g in test_raw.groupby("region_id",  sort=False)}
+    del train_raw, test_raw
     for i, region in enumerate(regions, 1):
         if i % 500 == 0 or i == n:
             print(f"   Region {i}/{n}  |  {time.time()-t0:.1f}s")
-        tr = train_raw.loc[train_raw["region_id"] == region].reset_index(drop=True)
-        te = test_raw.loc[test_raw["region_id"] == region].reset_index(drop=True)
+        tr = train_by_region[region]
+        te = test_by_region.get(region, pd.DataFrame())
         tr_f, te_f = compute_region_features(tr, te)
         all_tr_feat.append(tr_f)
         all_te_feat.append(te_f)
 
     train_feat = pd.concat(all_tr_feat, ignore_index=True)
     test_feat = pd.concat(all_te_feat, ignore_index=True)
-    del all_tr_feat, all_te_feat, train_raw, test_raw
+    del all_tr_feat, all_te_feat
     print(f"   Fertig  |  {time.time()-t0:.1f}s")
 
     # 3. Woechentliche Aggregation

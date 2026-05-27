@@ -68,8 +68,9 @@ LAG_COLS = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre"]
 LAGS = [1, 3, 7, 14, 21]
 ROLL_COLS = ["prec", "wind", "tmp"]
 ROLL_WINS = [7, 14, 30, 60, 90]
-# v4: extended from [7..35] to [7..112]  (up to 16 weeks back into training history)
-SCORE_LAGS = [7, 14, 21, 28, 35, 42, 56, 84, 112]
+# Only score_persist (last known level) — no lag array.
+# Multiple score lags all get the same forward-filled value at test time,
+# causing a train/test mismatch that hurts Kaggle MAE significantly.
 
 LGB_PARAMS = dict(
     objective="regression",
@@ -124,14 +125,16 @@ def build_feature_list() -> list[str]:
         for stat in ("mean", "std", "max")
     ]
     calendar = ["month_sin", "month_cos", "day_sin", "day_cos"]
-    score_names = ["score_persist"] + [f"score_lag{lag}" for lag in SCORE_LAGS]
+    # score_persist = last known drought level (same value at test time — valid signal)
+    # No score trend/lag array: at test time all lags = identical forward-filled value
+    # → differences = 0, causing train/test mismatch that degrades Kaggle MAE
+    score_names = ["score_persist"]
     drought_indices = [
         "prec_deficit_90d",
         "prec_trend_30d",
         "humidity_deficit_90d",
         "tmp_anomaly_90d",
         "heat_drought_idx",
-        "score_trend",
         "dry_days_14d",
         "dry_days_30d",
     ]
@@ -227,16 +230,10 @@ def compute_region_features(
     new_cols["dry_days_14d"] = dry.rolling(14, min_periods=3).sum().astype(np.float32)
     new_cols["dry_days_30d"] = dry.rolling(30, min_periods=7).sum().astype(np.float32)
 
-    # Score lags: ffill propagates last known score from training into test rows
+    # score_persist: last known drought level (forward-filled into test window)
+    # Only one score feature to avoid train/test mismatch from identical lag values
     score_filled = panel["score"].ffill()
     new_cols["score_persist"] = score_filled.shift(7).astype(np.float32)
-    for lag in SCORE_LAGS:
-        new_cols[f"score_lag{lag}"] = score_filled.shift(lag).astype(np.float32)
-
-    # Score trend: positive = drought worsening, negative = improving
-    new_cols["score_trend"] = (
-        new_cols["score_lag7"] - new_cols["score_lag35"]
-    ).astype(np.float32)
 
     # Single concat — no fragmentation
     panel = pd.concat([panel, pd.DataFrame(new_cols, index=panel.index)], axis=1)
@@ -468,11 +465,15 @@ def main() -> None:
     print("\n[2/6] Feature Engineering (pro Region) ...")
     all_tr_feat, all_te_feat = [], []
     n = len(regions)
+    # Pre-group once → O(n).  Without this, each .loc scan is O(n) → O(n×r) total = ~30 min.
+    train_by_region = {r: g.reset_index(drop=True) for r, g in train_raw.groupby("region_id", sort=False)}
+    test_by_region  = {r: g.reset_index(drop=True) for r, g in test_raw.groupby("region_id",  sort=False)}
+    del train_raw, test_raw
     for i, region in enumerate(regions, 1):
         if i % 500 == 0 or i == n:
             print(f"   Region {i}/{n}  |  {time.time()-t0:.1f}s")
-        tr = train_raw.loc[train_raw["region_id"] == region].reset_index(drop=True)
-        te = test_raw.loc[test_raw["region_id"] == region].reset_index(drop=True)
+        tr = train_by_region[region]
+        te = test_by_region.get(region, pd.DataFrame())
         tr_f, te_f = compute_region_features(tr, te)
         all_tr_feat.append(tr_f)
         all_te_feat.append(te_f)
