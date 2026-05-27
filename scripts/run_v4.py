@@ -159,35 +159,39 @@ def compute_region_features(
     """
     Train + test combined so rolling/lag features flow from training into test
     rows without look-ahead.  shift(1) on all rolling ops prevents data leakage.
+    All new columns collected in a dict and assigned via pd.concat to avoid
+    DataFrame fragmentation warnings.
     """
     te = te.copy()
     te["score"] = np.nan
     panel = pd.concat([tr, te], ignore_index=True).sort_values("ordinal").reset_index(drop=True)
 
+    new_cols: dict[str, np.ndarray] = {}
+
     # Calendar
-    panel["month_sin"] = np.sin(2 * np.pi * panel["month"] / 12).astype(np.float32)
-    panel["month_cos"] = np.cos(2 * np.pi * panel["month"] / 12).astype(np.float32)
-    panel["day_sin"] = np.sin(2 * np.pi * panel["day"] / 31).astype(np.float32)
-    panel["day_cos"] = np.cos(2 * np.pi * panel["day"] / 31).astype(np.float32)
+    new_cols["month_sin"] = np.sin(2 * np.pi * panel["month"] / 12).astype(np.float32)
+    new_cols["month_cos"] = np.cos(2 * np.pi * panel["month"] / 12).astype(np.float32)
+    new_cols["day_sin"]   = np.sin(2 * np.pi * panel["day"] / 31).astype(np.float32)
+    new_cols["day_cos"]   = np.cos(2 * np.pi * panel["day"] / 31).astype(np.float32)
 
     # Weather lags
     for col in LAG_COLS:
         s = panel[col]
         for lag in LAGS:
-            panel[f"{col}_lag{lag}"] = s.shift(lag).astype(np.float32)
+            new_cols[f"{col}_lag{lag}"] = s.shift(lag).astype(np.float32)
 
     # Rolling features (shift(1) avoids look-ahead)
     for col in ROLL_COLS:
         prior = panel[col].shift(1)
         for w in ROLL_WINS:
             r = prior.rolling(w, min_periods=3)
-            panel[f"{col}_roll{w}_mean"] = r.mean().astype(np.float32)
-            panel[f"{col}_roll{w}_std"] = r.std().astype(np.float32)
-            panel[f"{col}_roll{w}_max"] = r.max().astype(np.float32)
+            new_cols[f"{col}_roll{w}_mean"] = r.mean().astype(np.float32)
+            new_cols[f"{col}_roll{w}_std"]  = r.std().astype(np.float32)
+            new_cols[f"{col}_roll{w}_max"]  = r.max().astype(np.float32)
 
     # Precipitation deficit: negative = drier than annual baseline → drought signal
     prec_prior = panel["prec"].shift(1)
-    panel["prec_deficit_90d"] = (
+    new_cols["prec_deficit_90d"] = (
         prec_prior.rolling(90, min_periods=30).mean()
         - prec_prior.rolling(365, min_periods=60).mean()
     ).astype(np.float32)
@@ -196,42 +200,46 @@ def compute_region_features(
     p7 = prec_prior.rolling(7, min_periods=3).mean()
     p30 = prec_prior.rolling(30, min_periods=10).mean()
     p30_std = prec_prior.rolling(30, min_periods=10).std().clip(lower=0.01)
-    panel["prec_trend_30d"] = ((p7 - p30) / p30_std).astype(np.float32)
+    new_cols["prec_trend_30d"] = ((p7 - p30) / p30_std).astype(np.float32)
 
-    # v4: Humidity deficit (low humidity reinforces drought severity)
+    # Humidity deficit
     hum_prior = panel["humidity"].shift(1)
-    panel["humidity_deficit_90d"] = (
+    new_cols["humidity_deficit_90d"] = (
         hum_prior.rolling(90, min_periods=30).mean()
         - hum_prior.rolling(365, min_periods=60).mean()
     ).astype(np.float32)
 
-    # v4: Temperature anomaly (above-normal heat accelerates drought)
+    # Temperature anomaly
     tmp_prior = panel["tmp"].shift(1)
-    panel["tmp_anomaly_90d"] = (
+    tmp_anomaly = (
         tmp_prior.rolling(90, min_periods=30).mean()
         - tmp_prior.rolling(365, min_periods=60).mean()
     ).astype(np.float32)
+    new_cols["tmp_anomaly_90d"] = tmp_anomaly
 
-    # v4: Heat-drought interaction: simultaneous heat + low precip amplifies severity
-    panel["heat_drought_idx"] = (
-        panel["prec_deficit_90d"] * panel["tmp_anomaly_90d"].clip(lower=0)
+    # Heat-drought interaction
+    new_cols["heat_drought_idx"] = (
+        new_cols["prec_deficit_90d"] * tmp_anomaly.clip(lower=0)
     ).astype(np.float32)
 
-    # v4: Dry day counts (consecutive lack of rain is the physical drought mechanism)
+    # Dry day counts
     dry = (panel["prec"].shift(1) < DRY_THRESHOLD).astype(np.float32)
-    panel["dry_days_14d"] = dry.rolling(14, min_periods=3).sum().astype(np.float32)
-    panel["dry_days_30d"] = dry.rolling(30, min_periods=7).sum().astype(np.float32)
+    new_cols["dry_days_14d"] = dry.rolling(14, min_periods=3).sum().astype(np.float32)
+    new_cols["dry_days_30d"] = dry.rolling(30, min_periods=7).sum().astype(np.float32)
 
     # Score lags: ffill propagates last known score from training into test rows
     score_filled = panel["score"].ffill()
-    panel["score_persist"] = score_filled.shift(7).astype(np.float32)
+    new_cols["score_persist"] = score_filled.shift(7).astype(np.float32)
     for lag in SCORE_LAGS:
-        panel[f"score_lag{lag}"] = score_filled.shift(lag).astype(np.float32)
+        new_cols[f"score_lag{lag}"] = score_filled.shift(lag).astype(np.float32)
 
-    # v4: Score trend: positive = drought worsening, negative = improving
-    panel["score_trend"] = (
-        panel["score_lag7"] - panel["score_lag35"]
+    # Score trend: positive = drought worsening, negative = improving
+    new_cols["score_trend"] = (
+        new_cols["score_lag7"] - new_cols["score_lag35"]
     ).astype(np.float32)
+
+    # Single concat — no fragmentation
+    panel = pd.concat([panel, pd.DataFrame(new_cols, index=panel.index)], axis=1)
 
     n_tr = len(tr)
     return panel.iloc[:n_tr].copy(), panel.iloc[n_tr:].copy()
