@@ -47,7 +47,7 @@ OUT_PATH = OUT_DIR / "submission_v4.csv"
 # ─── Mode ──────────────────────────────────────────────────────────────────────
 # QUICK_MODE = True  -> ~20 min  (test pipeline, not for Kaggle)
 # QUICK_MODE = False -> ~90 min  (full Kaggle run)
-QUICK_MODE = True
+QUICK_MODE = False
 
 RANDOM_STATE = 42
 VAL_REGION_FRAC = 0.20
@@ -68,9 +68,6 @@ LAG_COLS = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre"]
 LAGS = [1, 3, 7, 14, 21]
 ROLL_COLS = ["prec", "wind", "tmp"]
 ROLL_WINS = [7, 14, 30, 60, 90]
-# Only score_persist (last known level) — no lag array.
-# Multiple score lags all get the same forward-filled value at test time,
-# causing a train/test mismatch that hurts Kaggle MAE significantly.
 
 LGB_PARAMS = dict(
     objective="regression",
@@ -125,10 +122,10 @@ def build_feature_list() -> list[str]:
         for stat in ("mean", "std", "max")
     ]
     calendar = ["month_sin", "month_cos", "day_sin", "day_cos"]
-    # score_persist = last known drought level (same value at test time — valid signal)
-    # No score trend/lag array: at test time all lags = identical forward-filled value
-    # → differences = 0, causing train/test mismatch that degrades Kaggle MAE
-    score_names = ["score_persist"]
+    # No score features at all:
+    #   score_persist = last training score, which is 91+ days stale at Kaggle test time
+    #   but only 7 days stale during training → model over-relies on it → test MAE degrades
+    #   The 90-day rolling weather windows capture drought persistence without this bias.
     drought_indices = [
         "prec_deficit_90d",
         "prec_trend_30d",
@@ -138,7 +135,7 @@ def build_feature_list() -> list[str]:
         "dry_days_14d",
         "dry_days_30d",
     ]
-    return WEATHER_COLS + lag_names + roll_names + calendar + score_names + drought_indices
+    return WEATHER_COLS + lag_names + roll_names + calendar + drought_indices
 
 
 # ─── Feature engineering ───────────────────────────────────────────────────────
@@ -229,11 +226,6 @@ def compute_region_features(
     dry = (panel["prec"].shift(1) < DRY_THRESHOLD).astype(np.float32)
     new_cols["dry_days_14d"] = dry.rolling(14, min_periods=3).sum().astype(np.float32)
     new_cols["dry_days_30d"] = dry.rolling(30, min_periods=7).sum().astype(np.float32)
-
-    # score_persist: last known drought level (forward-filled into test window)
-    # Only one score feature to avoid train/test mismatch from identical lag values
-    score_filled = panel["score"].ffill()
-    new_cols["score_persist"] = score_filled.shift(7).astype(np.float32)
 
     # Single concat — no fragmentation
     panel = pd.concat([panel, pd.DataFrame(new_cols, index=panel.index)], axis=1)

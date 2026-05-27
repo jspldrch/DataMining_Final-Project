@@ -118,9 +118,8 @@ def build_feature_list() -> list[str]:
         for stat in ("mean", "std", "max")
     ]
     calendar = ["month_sin", "month_cos", "day_sin", "day_cos"]
-    score_names = ["score_persist"]
     drought = ["prec_deficit_90d", "prec_trend_30d"]
-    return WEATHER_COLS + lag_names + roll_names + calendar + score_names + drought
+    return WEATHER_COLS + lag_names + roll_names + calendar + drought
 
 
 def compute_region_features(
@@ -171,10 +170,6 @@ def compute_region_features(
     p30 = prec_prior.rolling(30, min_periods=10).mean()
     p30_std = prec_prior.rolling(30, min_periods=10).std().clip(lower=0.01)
     panel["prec_trend_30d"] = ((p7 - p30) / p30_std).astype(np.float32)
-
-    # score_persist: letzter bekannter Dürre-Level (ffill in Test-Zeilen)
-    score_filled = panel["score"].ffill()
-    panel["score_persist"] = score_filled.shift(7).astype(np.float32)
 
     n_tr = len(tr)
     return panel.iloc[:n_tr].copy(), panel.iloc[n_tr:].copy()
