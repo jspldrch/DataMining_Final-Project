@@ -29,7 +29,7 @@ LAG_COLS = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre"]
 LAGS = [1, 3, 7, 14, 21]
 
 ROLL_COLS = ["prec", "wind", "tmp"]
-ROLL_WINDOWS = [7, 14]
+ROLL_WINDOWS = [7, 14, 30, 60, 90]
 ROLL_MIN_PERIODS = 3
 
 
