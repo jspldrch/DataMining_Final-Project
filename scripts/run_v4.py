@@ -142,13 +142,13 @@ def build_feature_list() -> list[str]:
 
 def _parse_dates_inplace(df: pd.DataFrame) -> None:
     parts = df["date"].str.split("-", expand=True)
-    df["year"] = parts[0].astype(np.int16)
-    df["month"] = parts[1].astype(np.int8)
-    df["day"] = parts[2].astype(np.int8)
+    df["year"] = parts[0].astype(np.int32)
+    df["month"] = parts[1].astype(np.int32)
+    df["day"] = parts[2].astype(np.int32)
     df["ordinal"] = (
-        df["year"].astype(np.int32) * 372
-        + df["month"].astype(np.int32) * 31
-        + df["day"].astype(np.int32)
+        df["year"] * 372
+        + df["month"] * 31
+        + df["day"]
     )
 
 
