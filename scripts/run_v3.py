@@ -78,7 +78,7 @@ LGB_PARAMS = dict(
     verbose=-1,
 )
 XGB_PARAMS = dict(
-    objective="reg:absoluteerror",
+    objective="reg:squarederror",
     n_estimators=N_ESTIMATORS,
     learning_rate=0.04,
     max_depth=6,
