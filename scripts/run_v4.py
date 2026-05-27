@@ -472,7 +472,7 @@ def main() -> None:
 
     train_feat = pd.concat(all_tr_feat, ignore_index=True)
     test_feat = pd.concat(all_te_feat, ignore_index=True)
-    del all_tr_feat, all_te_feat, train_raw, test_raw
+    del all_tr_feat, all_te_feat
     print(f"   Fertig  |  {time.time()-t0:.1f}s")
 
     # 3. Weekly aggregation
