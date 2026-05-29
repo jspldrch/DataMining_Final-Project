@@ -171,7 +171,6 @@ def compute_regional_mean_score(train_raw: pd.DataFrame) -> pd.Series:
 
 
 def add_regional_mean_score(df: pd.DataFrame, region_means: pd.Series) -> pd.DataFrame:
-    df = df.copy()
     df["regional_mean_score"] = df["region_id"].map(region_means).astype(np.float32)
     return df
 
