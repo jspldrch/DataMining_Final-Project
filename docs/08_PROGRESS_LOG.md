@@ -102,3 +102,46 @@
 **Action:** `parallel_util.py`, region-parallel streaming v2, parallel sliding samples + 5-week LGBM; Colab `/content/` CSV copy in 03b.
 
 **Current Task:** `git pull` → **03b** → **04b** → Kaggle `submission_full_v2.csv`.
+
+## Step 16: Colab 04b — Drive, RAM, LightGBM, Kaggle-Ergebnis (May 20, 2026)
+
+### Colab / Infrastruktur
+- **`OSError [Errno 107]`** beim `read_parquet` von Drive: FUSE-Mount instabil → Parquet nach `/content/` kopieren oder Runtime neu starten; optional `read_parquet_notebook()` in `project_env.py` (nur 04/04b).
+- **RAM-Crash** in `build_region_holdout`: ~1,76 Mio. Tageszeilen + `test_df` + Kopien → Colab-OOM. **03/03b unverändert**; Problem nur in 04/04b. Experiment mit frühem `train_weekly` / `DM_WORKERS=1` in `bootstrap` wieder verworfen (03b soll parallel bleiben).
+
+### 04 vs. 04b — Pipeline vereinheitlicht
+- **04** (v1) lief stabil und lieferte **Kaggle MAE ~0,9**.
+- **04b** an **gleiche Zelllogik** wie 04 angeglichen (Holdout auf `train_df`, sequentielles LGBM, Final-Fit auf `X_all`).
+- Modell-Upgrade in 04b nur dort: `LGB_PARAMS` (800 trees, lr 0,04, L1/L2), v2-Features, optional **`BLEND_PERSIST = 0.35`**.
+
+### LightGBM 4.x (Colab Python 3.12)
+- **`TypeError: Wrong type(ndarray) for label`**: kein `y[:, week]`-Slice; Labels als **`list`** via `y_week()` / `labels_for_week()` in `modeling_train.py`.
+- **`eval_set`**: pro Woche `y_va[:, week]`, nicht ganzes 2D-`y_va`.
+- Paralleles Wochen-Training in 04b durch **sequentielle Schleife wie 04** ersetzt (Colab-stabil).
+
+### Kaggle-Ergebnis v2
+| Run | Pipeline | Public MAE (ca.) |
+|-----|----------|------------------|
+| 1 | **03 + 04** (v1) | **~0,9** |
+| 2 | **03b + 04b** (v2 + Blend) | **~1,1** (schlechter) |
+
+**Hypothesen Verschlechterung:**
+1. **`BLEND_PERSIST = 0.35`** mischt mit `last_score` vom **Trainingsende** — nicht zum Ende der 91 Test-Tage → zeitlich falsch für `pred_week1..5`.
+2. v2-Modell evtl. Overfit (mehr Features, aggressiveres LGBM vs. 04).
+3. Abgekürzter Final-Fit (`final_models = models` / weniger Bäume) verschlechtert Submission.
+
+**Nächste Tests:** `BLEND_PERSIST = 0`; v2-Features + **04-Hyperparameter**; 03b-Daten checken (2.248 Regionen, ~204k Test-Zeilen).
+
+### Code-Änderungen (Mai 20)
+- `scripts/modeling_train.py` — `labels_for_week()`, `eval_set` pro Woche, `n_workers<=1` ohne ProcessPool.
+- `scripts/weekly_model.py` — `already_weekly`, `float32` in `slim_for_modeling`, `labels_for_week`/`weekly_summary`.
+- `scripts/project_env.py` — `read_parquet_notebook()` (optional Colab).
+- `notebooks/04b_modeling_v2.ipynb` — Pipeline wie 04, `y_week()`, Blend optional.
+- `docs/02_COLAB_SETUP.md` — RAM/Drive-Hinweise für 04/04b.
+
+**Current Task:** 04b mit `BLEND_PERSIST=0` und/oder 04-Params erneut submitten; v1 (0,9) als Baseline behalten.
+
+## Step 17: Colab-Erweiterung (Cursor/VS Code CLI) (May 20, 2026)
+**Goal:** Notebooks lokal bearbeiten, Kernel auf Colab — ohne erzwungenen `git clone` weg vom lokalen Repo.
+**Action:** `resolve_project_root()` / `resolve_outputs_dir()` in `project_env.py`; `notebook_init` nutzt Workspace zuerst; Setup-Zellen in 03/03b/04/04b vereinheitlicht; Doku in `docs/02_COLAB_SETUP.md`.
+**Erkennung:** Setup-Print `Colab Extension / Workspace: Code aus …`

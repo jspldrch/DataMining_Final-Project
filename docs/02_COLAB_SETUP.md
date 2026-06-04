@@ -4,13 +4,58 @@
 
 ## Kurz
 
-| Was | Lokal | Colab |
-|-----|--------|--------|
-| Code | Repo-Clone | `git pull` → `/content/DataMining_Final-Project` |
-| `train.csv`, `test.csv` | `data/` im Projekt | **dieselben Dateien** auf Drive |
-| Outputs | `outputs/` | `MyDrive/.../outputs/` |
+| Was | Lokal | Colab (Browser) | Colab-Erweiterung (Cursor/VS Code) |
+|-----|--------|-----------------|-------------------------------------|
+| Code | Repo auf dem Mac | `git pull` → `/content/DataMining_Final-Project` | **synchronisiertes Repo** (dein Ordner) |
+| `train.csv`, `test.csv` | `data/` | Drive `MyDrive/.../data/` | Drive (empfohlen) oder `data/` im Repo |
+| Outputs | `outputs/` | `MyDrive/.../outputs/` | Drive wenn Daten auf Drive, sonst `outputs/` im Repo |
 
-Setup in **03** und **04**: eine Zelle `from scripts.notebook_init import setup` → `env = setup()` (siehe `scripts/project_env.py`).
+Setup in **03** / **03b** / **04** / **04b**: Zelle 1 → `env = setup()` (siehe `scripts/project_env.py`).
+
+---
+
+## Colab-Erweiterung in Cursor / VS Code
+
+Notebook **lokal** öffnen, Kernel **„Colab“** wählen (Remote-Runtime).
+
+### Was sich ändert (ab Mai 2026 im Repo)
+
+- **Kein** manueller `git clone` mehr in den Notebooks.
+- `setup()` erkennt Colab und nutzt zuerst dein **synchronisiertes Workspace-Repo** (`scripts/features.py` unter `cwd`).
+- Nur wenn kein Repo gefunden wird: Fallback wie früher (`/content/DataMining_Final-Project` + `git pull`).
+- **Drive** wird weiter gemountet (`drive.mount`) — CSVs bleiben auf `MyDrive/.../data/` wie bisher.
+
+### Ablauf
+
+1. Colab-Erweiterung installieren, mit Google anmelden.
+2. Projektordner in Cursor öffnen (Root mit `scripts/`, `notebooks/`).
+3. `.ipynb` öffnen → Kernel: **Colab** → CPU (oder High-RAM für 04).
+4. Zelle 1 ausführen; Ausgabe prüfen:
+   - `Colab Extension / Workspace: Code aus …` → dein Sync-Ordner
+   - `git pull OK → /content/…` → Browser-Fallback (oder `DM_FORCE_GIT_COLAB=1`)
+5. `Train:` / `Test:` **OK** — sonst Drive-Pfad prüfen (unten).
+
+### Wichtig
+
+| Thema | Empfehlung |
+|--------|------------|
+| Code-Änderungen | Lokal speichern → Kernel nutzt **diesen** Stand (nicht GitHub, außer Fallback). |
+| Große CSVs | Weiter auf **Drive** legen, nicht ins Repo committen. |
+| Outputs | Bei Drive-Daten → `MyDrive/.../outputs/`; bei `data/` im Repo → `outputs/` lokal im Projekt. |
+| `git push` | Nur nötig für Teammates / Browser-Colab; Extension braucht es nicht für deinen Code. |
+
+### Optionale Umgebungsvariablen (vor `setup()`)
+
+```python
+import os
+# os.environ["DM_PROJECT_ROOT"] = "/content/drive/MyDrive/.../DataMining_Final-Project"
+# os.environ["DM_FORCE_GIT_COLAB"] = "1"   # erzwingt git pull nach /content/...
+# os.environ["DM_MODE"] = "sample"         # oder full
+```
+
+---
+
+## Colab im Browser (klassisch)
 
 ```
 MyDrive/DataMining/DataMining_Final-Project/
