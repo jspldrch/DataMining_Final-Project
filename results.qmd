@@ -1,0 +1,309 @@
+---
+title: "Drought Severity Prediction – Ergebnisse & Analyse"
+author: "Jana Speldrich"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+  pdf:
+    toc: true
+execute:
+  echo: false
+  warning: false
+---
+
+# Überblick
+
+Kaggle-Wettbewerb zur Vorhersage von Dürreschwere (Score 0–5) für **2.248 Regionen**, jeweils **5 Wochen** in die Zukunft.
+Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
+
+- Trainingsdaten: täglich, ~13 Jahre pro Region (Ordinal-Jahre 1000–8133)
+- Testdaten: 91 Tage pro Region (kein Score vorhanden)
+- Limit: 3 Submissions pro Tag
+
+---
+
+# Ergebnisse
+
+## Kaggle-Scores im Überblick
+
+| Script | Val MAE (lokal) | **Kaggle MAE** | Verbesserung vs. v12 |
+|--------|:-:|:-:|:-:|
+| **v12** *(Baseline, bester Score)* | ~0.04 | **0.8258** ✓ | — |
+| v15 (score_lag1-5, seasonal dev) | 0.1058 | 1.0470 ✗ | −0.22 |
+| v16_chain (autoregressive) | 0.5213 | 0.9863 ✗ | −0.16 |
+| v17 (score_lag1-7, rolling, XGB-MAE) | 0.0681 | 1.0815 ✗ | −0.26 |
+| **v18** (gap=13 score_lag) | **0.1831** | **0.9134** ✗ | −0.09 |
+| kaggle_v1_base | — | *ausstehend* | |
+| kaggle_v2_seasonal | — | *ausstehend* | |
+| kaggle_v3_scorlag | — | *ausstehend* | |
+
+: {.striped .hover}
+
+> **Kernbeobachtung:** Alle Versionen mit `score_lag` sind **schlechter** als v12 (kein score_lag).
+> Der lokale Val-MAE korreliert nicht mit dem Kaggle-Score — ein klares Zeichen, dass das Val-Schema das Testszenario nicht abbildet.
+
+---
+
+## Implementierungsunterschiede
+
+| Feature / Design | v12 | v15 | v16_chain | v17 | kaggle_v1 | kaggle_v2 | kaggle_v3 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| score_lag1/2/3 | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| score_lag4-7 | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| score rolling (mean_4w etc.) | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| seasonal deviation | ✗ | ✓ | ✓ | ✓ | ✗ | **✓** | ✗ |
+| chain forecasting | ✗ | ✗ | **✓** | ✗ | ✗ | ✗ | ✗ |
+| wind_roll_* (Noise) | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ |
+| XGBoost MAE-Objective | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| X_test = letzter Test-Tag | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| X_test = letzter Train-Tag | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✓** |
+| LGB + XGB + CatBoost | ✓ | ✓ | ✗ (LGB only) | ✓ | ✓ | ✓ | ✓ |
+| Multi-Seed LGB | ✗ | ✗ | ✗ | ✓ (2 Seeds) | ✗ | ✗ | ✗ |
+
+---
+
+## Feature Importance (LightGBM Gain)
+
+Aus den ausgeführten Scripts:
+
+| Feature | v15 (gap=0) | v17 (gap=0) | v16_chain | **v18 (gap=13)** |
+|---|:-:|:-:|:-:|:-:|
+| score_lag1 | 78.88 % | 76.78 % | 91.19 % | **41–46 %** |
+| score_lag2 | 12.39 % | — | 7.16 % | 4–7 % |
+| score_lag3 | — | 0.73 % | — | 1.3 % |
+| score_mean_4w | — | 9.34 % | — | — |
+| **Alle score-Features** | ~93 % | 93.3 % | ~99 % | **~50 %** |
+| **Wetter-Features gesamt** | ~7 % | ~6.7 % | ~1 % | **~49 %** |
+
+> **Mit gap=13 verschiebt sich die Feature Importance drastisch**: score_lag fällt von 93% auf 50%, Wetter steigt von 7% auf 49%.
+> Das ist die richtige Richtung — aber selbst 50/50 reicht nicht, weil der stale score_lag im Test noch immer schadet.
+> v12 (0% score_lag, 100% Wetter) bleibt das beste Modell.
+
+---
+
+# Analyse: Warum score_lag schadet
+
+## Das Staleness-Problem
+
+```
+Training (Sliding Windows):
+  X[t] enthält score_lag1 = Score von Woche t  →  sehr frisch (0 Tage alt)
+  y[t] = Scores der nächsten 5 Wochen
+  Autokorrelation lag1 = 0.97 → fast perfekte Vorhersage
+
+Test (Kaggle):
+  X_test = Features vom letzten Test-Tag (Tag 91 des Test-Fensters)
+  score_lag1 = letzter TRAININGS-Score (vor 91 Tagen!)
+  Autokorrelation nach 13 Wochen ≈ 0.60–0.70
+
+Ergebnis: Modell gibt 90% Gewicht auf veraltete Info → schlechte Predictions
+```
+
+| Szenario | score_lag1 Alter | Autokorr. | Modell-Performance |
+|---|:-:|:-:|:-:|
+| Validierung (lokal) | 1 Woche | ~0.97 | MAE ≈ 0.03–0.10 |
+| Kaggle Test | ~13 Wochen | ~0.60 | MAE ≈ 1.04–1.08 |
+| v12 (kein score_lag) | — | — | MAE ≈ 0.82 |
+
+## v18: Gap-Simulation — Ergebnisse & Interpretation
+
+v18 simuliert die 91-Tage-Lücke direkt: `score_lag1 = sc[t - 13]` in Training **und** Validation.
+
+```
+v18 Ergebnisse:
+  Val MAE (gap=13, realistisch):  0.1831
+  Val MAE (gap=0,  optimistisch): 0.1275
+  Kaggle MAE:                     0.9134
+
+  Persistence-Baseline in Val:    0.0321  ← kritischer Hinweis!
+  score_lag1 (gap=13) wiederholt: 0.6535
+```
+
+**Was gut funktioniert hat:**
+Feature Importance verschob sich von 93% score_lag → 50% score_lag / 49% Wetter.
+Das Modell nutzt bei stale Scores automatisch mehr Wetter-Signale.
+
+**Warum val MAE (0.18) trotzdem ≠ Kaggle MAE (0.91):**
+
+Die Persistence-Baseline von 0.0321 enthüllt das eigentliche Problem.
+In den letzten 5 Val-Wochen sind die Dürre-Scores kaum verändert — die Val-Regionen
+befinden sich am Ende einer stabilen Periode. Der einfachste mögliche Predictor
+(letzten Score wiederholen) macht MAE 0.03.
+
+Im Kaggle-Test hingegen: echte Unsicherheit über 91 unbekannte Tage. Dürre-Bedingungen
+können sich in dieser Zeit dramatisch ändern. Das Val-Schema testet die **falsche Frage**.
+
+```
+Val fragt:  "Wie stabil ist Dürre in den nächsten 5 Wochen einer bekannten Region?"
+Test fragt: "Was passiert in 5 Wochen nach 91 unbekannten Tagen?"
+```
+
+**Fazit v18:** Gap-Simulation adressiert das score_lag-Staleness-Problem,
+aber nicht das grundlegende Val-Schema-Problem. Selbst mit gap=13 sind Val-Regionen
+zu "leicht" weil sie am Ende stabiler Phasen liegen.
+
+**Kaggle v18 = 0.9134 > v12 = 0.8258:** Selbst gap-trainierter score_lag (50% Gewicht)
+schadet noch immer im Vergleich zu keinem score_lag. **v12 bleibt das beste Modell.**
+
+---
+
+# Validierungsschema – Analyse & Alternativen
+
+## Aktuelles Schema
+
+```
+Region-Holdout (20%):
+  Train: 80% der Regionen, alle Windows (stride=1)
+  Val:   20% der Regionen, NUR letztes Window pro Region
+         → 449 Datenpunkte (2248 × 20%)
+         → score_lag1 = Score von vor 1 Woche (immer frisch!)
+```
+
+**Problem:** Das Val-Schema testet die falsche Schwierigkeitsstufe.
+Im Training/Val ist score_lag immer frisch (Autokorr. 0.97).
+Im Kaggle-Test ist score_lag 13 Wochen alt (Autokorr. 0.60–0.70).
+Das führt zur riesigen Diskrepanz: Val-MAE 0.03 vs. Kaggle-MAE 0.82.
+
+## Unbekannte Teststruktur
+
+Wir wissen nicht genau, wie der Kaggle-Test aufgebaut ist:
+
+| Hypothese | Beschreibung | Konsequenz für score_lag |
+|---|---|---|
+| **A** *(wahrscheinlich)* | Gleiche Regionen, Prediction nach 91-Tage-Fenster | score_lag = 13+ Wochen alt → veraltet |
+| **B** | Gleiche Regionen, Prediction innerhalb des 91-Tage-Fensters | score_lag = 1-13 Wochen alt → teils nützlich |
+| **C** | Völlig neue Regionen (nicht im Training) | score_lag aus Training komplett nutzlos |
+
+> v12's Überlegenheit deutet auf **Hypothese A oder C** hin: Wetter-Features sind robuster als score_lag.
+
+## Alternative Validierungsstrategien
+
+### Option 1: Time-based Split (empfohlen als Vergleich)
+
+```python
+# Statt Region-Holdout: für ALLE Regionen letzte N Wochen als Val
+for region, g in weekly.groupby("region_id"):
+    train_part = g.iloc[:-N]   # alles bis auf letzte N Wochen
+    val_part   = g.iloc[-N:]   # letzte N Wochen
+```
+
+**Vorteile:**
+- Jede Region hat einen Val-Punkt → ~2248 Datenpunkte statt 449
+- Testet Zeitgeneralisierung innerhalb bekannter Regionen
+
+**Nachteile:**
+- score_lag noch immer frisch (kein simulierter 91-Tage-Gap)
+
+---
+
+### Option 2: Gap-Simulation (realistischstes Val-Schema)
+
+```python
+# Für jede Region: score_lag1 = Score von VOR 13 Wochen (simuliert 91-Tage-Gap)
+# X[t] = Features bei Woche t
+# score_lag1_test = sc[t - 13]  (statt sc[t])
+# y = Scores bei Woche t+1..t+5
+```
+
+**Vorteile:**
+- Simuliert exakt das Testszenario (score_lag 13 Wochen alt)
+- Val-MAE würde realistisch ≈ Kaggle-MAE werden
+- Würde zeigen ob score_lag mit GAP noch nützlich ist
+
+**Nachteile:**
+- Komplexere Implementierung
+- Reduziert Trainings-Datenpunkte pro Region
+
+---
+
+### Option 3: Gemischte Strategie
+
+```
+Train: alle Windows, score_lag immer frisch
+Val:   wie Testszenario, score_lag = 13 Wochen alt (Gap-Simulation)
+```
+
+**Resultat:** Modell lernt mit frischem score_lag zu trainieren, wird aber an
+realem Testszenario evaluiert. Der Kaggle-Score würde in val besser vorhergesagt.
+
+---
+
+## Empfehlung: Was testen?
+
+**Erkenntnisstand:** score_lag schadet in allen Varianten. v12 (kein score_lag) ist bestes Modell.
+**Strategie:** Wetter-Features verbessern, nicht score_lag.
+
+| Test | Priorität | Erwarteter Erkenntnisgewinn |
+|---|:-:|---|
+| kaggle_v1_base (kein score_lag) | ⭐⭐⭐ | Reproduziert v12 mit mehr Features — kann es besser sein? |
+| Time-based Val (lokal) | ⭐⭐⭐ | Testet ob Val-MAE realistischer wird (letzter N Wochen aller Regionen) |
+| RECENT_YEARS = 3 oder 5 | ⭐⭐ | Fokus auf aktuellste Muster, weniger historischer Drift |
+| kaggle_v2_seasonal | ⭐⭐ | Isoliert seasonal dev — hilft es ohne score_lag? |
+| XGBoost-only (kein LGB) | ⭐ | XGB hatte 95% Blend-Gewicht, LGB scheint schwächer |
+| kaggle_v3_scorlag | ⭐ | Weniger sinnvoll — score_lag schadet laut v18 auch mit gap=13 |
+
+---
+
+# Nächste Schritte
+
+**Laufend:** kaggle_v1_base auf Kaggle
+
+**Lokal parallel testen (ein Script):**
+
+Option A — Time-based Val: letzten 8–13 Wochen aller Regionen als Val verwenden.
+Wenn Val-MAE dann ≈ 0.82 → Schema-Problem bestätigt, können val als Optimierungsmetrik nutzen.
+
+Option B — RECENT_YEARS: v1_base mit `RECENT_YEARS=5` laufen lassen.
+Wenn Kaggle-Score besser → ältere Daten schaden (anderen Klimaperioden).
+
+**Nächste Submission-Runde (nach v1_base Ergebnis):**
+- Ist v1 ≈ v12 → Basis ist korrekt, verbessern mit time-based val + feature-Tuning
+- Ist v1 < v12 → v1 hat bessere Wetter-Features → darauf aufbauen
+- Ist v1 > v12 → v12 Features waren spezifisch besser → v12 analysieren
+
+---
+
+# Technische Details
+
+## Datenstruktur NPZ
+
+```python
+# train.npz
+# Keys: region_id (int32), region_names (str), year, month, day (int32)
+#       prec, surf_pre, humidity, tmp, dp_tmp, wb_tmp,
+#       tmp_max, tmp_min, tmp_range, surf_tmp,
+#       wind, wind_max, wind_min, wind_range (float32)
+#       score (float32)
+
+# test.npz: identisch, ohne 'score'
+
+# Ordinal: year*372 + month*31 + day (proprietäres Kalender-System)
+```
+
+## Cache-Strategie
+
+```
+cache_weekly.npz      (~495 MB)   Feature Engineering, geteilt v1/v2/v3
+cache_windows_v1.npz  (~855 MB)   Sliding Windows für v1
+cache_windows_v2.npz              Sliding Windows für v2
+cache_windows_v3.npz              Sliding Windows für v3
+```
+
+## Modell-Parameter (alle Scripts)
+
+```python
+LGB_PARAMS = dict(
+    n_estimators=1000, learning_rate=0.04, num_leaves=127,
+    min_child_samples=60, subsample=0.8, colsample_bytree=0.8,
+    reg_alpha=0.1, reg_lambda=0.1
+)
+XGB_PARAMS = dict(
+    n_estimators=1000, learning_rate=0.04, max_depth=6,
+    min_child_weight=50, subsample=0.8, colsample_bytree=0.8
+)
+# Blend-Gewichte: automatisch optimiert auf Val-MAE (Grid-Suche, 5%-Schritte)
+```
