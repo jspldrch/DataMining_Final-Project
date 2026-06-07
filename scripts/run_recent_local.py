@@ -46,7 +46,7 @@ SAMPLE_SUB = DATA_DIR / "sample_submission.csv"
 OUT_PATH   = OUT_DIR  / "submission_recent_local.csv"
 
 # ── Knobs ─────────────────────────────────────────────────────────────────────
-RECENT_YEARS    = 10        # nur Trainings-Fenster aus den letzten N Jahren
+RECENT_YEARS    = 8        # nur Trainings-Fenster aus den letzten N Jahren
 RANDOM_STATE    = 42
 VAL_REGION_FRAC = 0.20
 WEEK_BUCKET     = 7
@@ -422,18 +422,25 @@ def main():
         if f not in weekly.columns:
             weekly[f] = np.float32(0)
 
-    # 3. RECENT-Filter: nur letzte RECENT_YEARS Jahre für Sliding-Windows
-    max_ord    = int(weekly["ordinal"].max())
-    recent_cut = max_ord - RECENT_YEARS * ORDINAL_PER_YEAR
-    weekly_all    = weekly.copy()          # für Final-Training
-    weekly_recent = weekly[weekly["ordinal"] >= recent_cut].copy()
+    # 3. RECENT-Filter: pro Region die letzten RECENT_YEARS Jahre behalten
+    # Globaler Cutoff würde Regionen mit frühen Zeitperioden komplett ausschließen
+    # (verschiedene Regionen decken verschiedene Zeitspannen ab).
+    # Deshalb: jede Region behält nur ihre eigenen letzten RECENT_YEARS Jahre.
+    def filter_recent_per_region(df: pd.DataFrame) -> pd.DataFrame:
+        parts = []
+        for _, g in df.groupby("region_id", sort=False):
+            cutoff = int(g["ordinal"].max()) - RECENT_YEARS * ORDINAL_PER_YEAR
+            parts.append(g[g["ordinal"] >= cutoff])
+        return pd.concat(parts, ignore_index=True)
+
+    weekly_all    = weekly.copy()
+    weekly_recent = filter_recent_per_region(weekly)
 
     n_recent = len(weekly_recent)
     n_total  = len(weekly)
     pct      = 100 * n_recent / n_total
-    print(f"\n   Recent-Filter: Cutoff-Ordinal = {recent_cut}")
+    print(f"\n   Recent-Filter: letzte {RECENT_YEARS} Jahre pro Region (individueller Cutoff)")
     print(f"   Behalte {n_recent:,} / {n_total:,} wöchentliche Punkte ({pct:.0f}%)")
-    print(f"   = letzte {RECENT_YEARS} Jahre der Trainingsdaten")
 
     # 4. Sliding Windows (aus recent-gefiltertem weekly)
     print(f"\n[3/5] Sliding Windows (nur letzte {RECENT_YEARS} Jahre) ...  [{elapsed(t0)}]")
