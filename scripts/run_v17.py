@@ -1,27 +1,26 @@
 """
-run_v15.py  –  Drought Severity Prediction v15
+run_v17.py  –  Drought Severity Prediction v17  (Overnight Run)
 
-Neu vs v12:
-  + score_lag1/2/3       – fehlt in v12, Autokorrelation 0.966, Scout Rank 1/2/5
-  + seasonal deviations  – prec/humidity/tmp vs Region-Monats-Mittelwert, Scout Rank 6/9/18
-  + Bereinigte Features  – kein *_roll_max, kein wind_roll_*, kein dry_days (Scout: Noise)
+Neu vs v15:
+  + score_lag1-7      – 7 Wochen Score-History (v15b: nur lag1-5)
+  + score_mean_4w     – Gleitender 4-Wochen-Mittelwert (geglättetes Signal)
+  + score_std_4w      – Streuung letzte 4 Wochen (Volatilität der Dürre)
+  + score_mean_8w     – Gleitender 8-Wochen-Mittelwert (längerer Trend)
+  + score_trend       – Richtung: score_lag1 minus score_lag5
+  + XGBoost MAE-Obj   – reg:absoluteerror statt squared (matches Metric)
+  + Multi-Seed LGB    – N_LGB_SEEDS Runs, Predictions gemittelt (Varianzreduktion)
 
-Modelle:
-  LightGBM / XGBoost / CatBoost — je 5 Modelle (eines pro Vorhersage-Woche)
-  Warum 5 statt 1: Woche 1 (Autokorr. 0.97) braucht anderen Feature-Mix als
-  Woche 5 (Autokorr. 0.58). Jedes Modell kann sich spezialisieren.
-  CatBoost = Gradient Boosting von Yandex, findet andere Muster → Ensemble-Diversität.
+Bug-Fixes (identisch zu v15b):
+  + test score_lag2-7 nutzen echte Trainingswerte (nicht Kopie von lag1)
+  + Seasonal Dev Monat 12 korrekt gruppiert (12*31=372 → Wrap-around behoben)
 
-Jahre: RECENT_YEARS filtert PER REGION (letzte N Jahre des jeweiligen 13-Jahres-Fensters).
-       Default None = alle 13 Jahre nutzen.
-
-Checkpoints:
-  data/precomputed/_checkpoint_weekly.npz      – Feature Engineering, ~20 Min, wiederverwendet
-  data/precomputed/_checkpoint_v15_windows.npz – Sliding Windows, ~3 Min, neu wenn Features ändern
+Vergleich:
+  v15  → Baseline mit score_lag1-5, Seasonal Dev, LGB+XGB+Cat
+  v17  → alle v15-Fixes + erweiterte Score-History + Score-Rolling + XGB-MAE
 
 Usage:
-    python scripts/run_v15.py
-Output: outputs/submission_v15.csv
+    python scripts/run_v17.py
+Output: outputs/submission_v17.csv
 """
 from __future__ import annotations
 import time
@@ -52,21 +51,19 @@ OUT_DIR.mkdir(exist_ok=True)
 TRAIN_CSV     = DATA_DIR / "train.csv"
 TEST_CSV      = DATA_DIR / "test.csv"
 SAMPLE_SUB    = DATA_DIR / "sample_submission.csv"
-OUT_PATH      = OUT_DIR / "submission_v15.csv"
+OUT_PATH      = OUT_DIR / "submission_v17.csv"
 WEEKLY_CACHE  = CACHE_DIR / "_checkpoint_weekly.npz"
-WINDOWS_CACHE = CACHE_DIR / "_checkpoint_v15b_windows.npz"
+WINDOWS_CACHE = CACHE_DIR / "_checkpoint_v17_windows.npz"
 
 # ─── Knobs ────────────────────────────────────────────────────────────────────
-QUICK_MODE      = False   # True ~15 Min (kein Submission), False ~45 Min (voll)
+QUICK_MODE      = False   # True = schnell testen (kein Submission)
 RANDOM_STATE    = 42
 VAL_REGION_FRAC = 0.20
 WEEK_BUCKET     = 7
 DRY_THRESHOLD   = 1.0
+RECENT_YEARS    = None    # None = alle 13 Jahre; 8 = letzte 8 Jahre pro Region
 
-# Per-Region-Recency: letzte N Jahre des jeweiligen 13-Jahres-Fensters jeder Region
-# None = alle 13 Jahre; 5 = letzte 5 Jahre; 8 = letzte 8 Jahre
-RECENT_YEARS    = None
-
+N_LGB_SEEDS   = 2         # LGB Multi-Seed: Predictions über Seeds gemittelt
 WINDOW_STRIDE = 4 if QUICK_MODE else 1
 N_ESTIMATORS  = 500 if QUICK_MODE else 1000
 
@@ -78,9 +75,6 @@ WEATHER_COLS = [
 ]
 LAG_COLS = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre", "humidity"]
 LAGS     = [1, 3, 7, 14, 21]
-
-# Rolling: NUR prec/humidity/tmp, NUR mean+std
-# wind_roll_* weg (Scout Bottom), *_roll_max weg (Scout Bottom)
 ROLL_COLS  = ["prec", "humidity", "tmp"]
 ROLL_WINS  = [7, 14, 30, 60, 90, 180]
 ROLL_STATS = ["mean", "std"]
@@ -92,16 +86,17 @@ def build_feature_list() -> list[str]:
     feats = list(WEATHER_COLS)
     feats += [f"{c}_lag{l}" for c in LAG_COLS for l in LAGS]
     feats += [f"{c}_roll{w}_{s}" for c in ROLL_COLS for w in ROLL_WINS for s in ROLL_STATS]
-    # week_sin/cos Gain ~13 → raus; month/day sin/cos behalten
     feats += ["month_sin", "month_cos", "day_sin", "day_cos"]
     feats += [
         "prec_deficit_90d", "prec_trend_30d", "humidity_deficit_90d",
         "tmp_anomaly_90d", "heat_drought_idx",
-        # dry_days_14d/30d: Scout Bottom 15 → raus
     ]
     feats.append("regional_mean_score")
-    # Neu v15
-    feats += ["score_lag1", "score_lag2", "score_lag3", "score_lag4", "score_lag5"]
+    # Score-Lags (7 Wochen)
+    feats += [f"score_lag{k}" for k in range(1, 8)]
+    # Score-Rolling
+    feats += ["score_mean_4w", "score_std_4w", "score_mean_8w", "score_trend"]
+    # Seasonal Deviation
     feats += ["prec_seasonal_dev", "humidity_seasonal_dev", "tmp_seasonal_dev"]
     return feats
 
@@ -114,7 +109,8 @@ LGB_PARAMS = dict(
     n_jobs=-1, verbose=-1,
 )
 XGB_PARAMS = dict(
-    objective="reg:squarederror", n_estimators=N_ESTIMATORS, learning_rate=0.04,
+    # reg:absoluteerror = direktes MAE-Ziel (v15 nutzte squared error)
+    objective="reg:absoluteerror", n_estimators=N_ESTIMATORS, learning_rate=0.04,
     max_depth=6, min_child_weight=50, subsample=0.8, colsample_bytree=0.8,
     reg_alpha=0.1, reg_lambda=1.0, tree_method="hist", n_jobs=-1, verbosity=0,
 )
@@ -134,12 +130,13 @@ def mae(y: np.ndarray, p: np.ndarray) -> float:
     return float(np.mean(np.abs(np.clip(p, 0, 5) - y)))
 
 def show_mae(name: str, y: np.ndarray, p: np.ndarray) -> None:
-    print(f"  {name:<50s}  MAE = {mae(y, p):.4f}")
+    print(f"  {name:<52s}  MAE = {mae(y, p):.4f}")
 
 def _parse_dates(df: pd.DataFrame) -> None:
     p = df["date"].str.split("-", expand=True)
-    df["year"] = p[0].astype(np.int32); df["month"] = p[1].astype(np.int32)
-    df["day"]  = p[2].astype(np.int32)
+    df["year"]  = p[0].astype(np.int32)
+    df["month"] = p[1].astype(np.int32)
+    df["day"]   = p[2].astype(np.int32)
     df["ordinal"] = df["year"] * 372 + df["month"] * 31 + df["day"]
 
 def _best_n(m, default: int) -> int:
@@ -150,7 +147,7 @@ def _best_n(m, default: int) -> int:
     except: return default
 
 
-# ─── Feature Engineering (läuft nur ohne Weekly-Cache) ────────────────────────
+# ─── Feature Engineering (nur ohne Weekly-Cache) ──────────────────────────────
 def _region_features(tr: pd.DataFrame, te: pd.DataFrame):
     te = te.copy(); te["score"] = np.nan
     panel = pd.concat([tr, te], ignore_index=True).sort_values("ordinal").reset_index(drop=True)
@@ -160,12 +157,12 @@ def _region_features(tr: pd.DataFrame, te: pd.DataFrame):
     nc["day_sin"]   = np.sin(2*np.pi*panel["day"]/31).astype(np.float32)
     nc["day_cos"]   = np.cos(2*np.pi*panel["day"]/31).astype(np.float32)
     woy = (panel["ordinal"] // 7) % 52
-    nc["week_sin"] = np.sin(2*np.pi*woy/52).astype(np.float32)  # im Cache, in v15 nicht genutzt
+    nc["week_sin"] = np.sin(2*np.pi*woy/52).astype(np.float32)
     nc["week_cos"] = np.cos(2*np.pi*woy/52).astype(np.float32)
     for col in LAG_COLS:
         s = panel[col]
         for lag in LAGS: nc[f"{col}_lag{lag}"] = s.shift(lag).astype(np.float32)
-    for col in ["prec", "humidity", "tmp", "wind"]:  # wind im Cache für Rückwärtskompatibilität
+    for col in ["prec", "humidity", "tmp", "wind"]:
         prior = panel[col].shift(1)
         for w in ROLL_WINS:
             r = prior.rolling(w, min_periods=max(3, w//10))
@@ -176,13 +173,16 @@ def _region_features(tr: pd.DataFrame, te: pd.DataFrame):
     nc["prec_deficit_90d"] = (
         pp.rolling(90, min_periods=30).mean() - pp.rolling(365, min_periods=60).mean()
     ).astype(np.float32)
-    p7 = pp.rolling(7, min_periods=3).mean(); p30 = pp.rolling(30, min_periods=10).mean()
-    nc["prec_trend_30d"] = ((p7 - p30) / pp.rolling(30, min_periods=10).std().clip(lower=0.01)).astype(np.float32)
+    p7  = pp.rolling(7, min_periods=3).mean()
+    p30 = pp.rolling(30, min_periods=10).mean()
+    nc["prec_trend_30d"] = (
+        (p7 - p30) / pp.rolling(30, min_periods=10).std().clip(lower=0.01)
+    ).astype(np.float32)
     hp = panel["humidity"].shift(1)
     nc["humidity_deficit_90d"] = (
         hp.rolling(90, min_periods=30).mean() - hp.rolling(365, min_periods=60).mean()
     ).astype(np.float32)
-    tp = panel["tmp"].shift(1)
+    tp   = panel["tmp"].shift(1)
     anom = (tp.rolling(90, min_periods=30).mean() - tp.rolling(365, min_periods=60).mean()).astype(np.float32)
     nc["tmp_anomaly_90d"]  = anom
     nc["heat_drought_idx"] = (nc["prec_deficit_90d"] * anom.clip(lower=0)).astype(np.float32)
@@ -198,24 +198,34 @@ def _daily_to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[df.groupby(wk, sort=False)["ordinal"].idxmax()].reset_index(drop=True)
 
 
-# ─── Neue V15-Features (brauchen Score-Spalte, daher nach Cache-Load) ─────────
-def add_v15_features(weekly: pd.DataFrame) -> pd.DataFrame:
+# ─── V17-Features (Score-History + Rolling + Seasonal Dev) ───────────────────
+def add_v17_features(weekly: pd.DataFrame) -> pd.DataFrame:
     weekly = weekly.sort_values(["region_id", "ordinal"]).copy()
-
-    # Score-Lags: lag1 = aktueller Score, lag2+ = Vorwochen
     g = weekly.groupby("region_id")["score"]
-    weekly["score_lag1"] = g.transform(lambda x: x).astype(np.float32)
-    for k, col in enumerate(["score_lag2", "score_lag3", "score_lag4", "score_lag5"], 1):
-        weekly[col] = g.shift(k).astype(np.float32)
-    # NaN am Anfang jeder Region mit nächst-bekanntem Wert füllen
-    for prev, cur in zip(
-        ["score_lag1", "score_lag2", "score_lag3", "score_lag4"],
-        ["score_lag2", "score_lag3", "score_lag4", "score_lag5"],
-    ):
-        weekly[cur].fillna(weekly[prev], inplace=True)
 
-    # Saisonale Abweichung: aktueller Wert minus historischer Region-Monats-Mittelwert
-    # Fix: Monat 12 → 12*31=372 → ordinal%372=day → //31=0 (falsch). Korrektur: 0→12
+    # Score-Lags 1-7
+    weekly["score_lag1"] = g.transform(lambda x: x).astype(np.float32)
+    for k in range(1, 7):
+        weekly[f"score_lag{k+1}"] = g.shift(k).astype(np.float32)
+    # NaN am Anfang jeder Region mit nächst-bekanntem Wert füllen
+    for i in range(1, 7):
+        weekly[f"score_lag{i+1}"].fillna(weekly[f"score_lag{i}"], inplace=True)
+
+    # Score-Rolling (inkl. aktueller Woche)
+    weekly["score_mean_4w"] = g.transform(
+        lambda x: x.rolling(4, min_periods=1).mean()
+    ).astype(np.float32)
+    weekly["score_std_4w"] = g.transform(
+        lambda x: x.rolling(4, min_periods=1).std().fillna(0)
+    ).astype(np.float32)
+    weekly["score_mean_8w"] = g.transform(
+        lambda x: x.rolling(8, min_periods=1).mean()
+    ).astype(np.float32)
+
+    # Trend: Dürre schlimmer oder besser geworden in letzten 5 Wochen?
+    weekly["score_trend"] = (weekly["score_lag1"] - weekly["score_lag5"]).astype(np.float32)
+
+    # Saisonale Abweichung (mit Monat-12 Fix)
     m = (weekly["ordinal"] % 372) // 31
     weekly["_month"] = m.where(m > 0, 12).astype(np.int8)
     for col in ["prec", "humidity", "tmp"]:
@@ -228,7 +238,6 @@ def add_v15_features(weekly: pd.DataFrame) -> pd.DataFrame:
 
 # ─── Checkpoint 1: Wöchentliche Daten ─────────────────────────────────────────
 def load_weekly() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Lädt aus Cache oder berechnet neu + speichert Cache."""
     if WEEKLY_CACHE.exists():
         print(f"   Weekly-Cache: {WEEKLY_CACHE.name}  ({WEEKLY_CACHE.stat().st_size/1e6:.0f} MB)")
         ck = dict(np.load(WEEKLY_CACHE, allow_pickle=True))
@@ -239,7 +248,6 @@ def load_weekly() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
         weekly["ordinal"]   = ck["weekly_ordinal"].astype(np.int32)
         return weekly, ck["X_test"].astype(np.float32), ck["test_region_ids"].astype(str)
 
-    # Kein Cache → volle Berechnung
     print("   Kein Cache — Feature Engineering (~20 Min) ...")
     dtypes = {c: np.float32 for c in WEATHER_COLS}
     train_raw = pd.read_csv(TRAIN_CSV, dtype=dtypes)
@@ -292,9 +300,8 @@ def load_weekly() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
 
 # ─── Checkpoint 2: Sliding Windows ───────────────────────────────────────────
 def _per_region_cutoff(g: pd.DataFrame) -> pd.DataFrame:
-    """Filtert auf letzte RECENT_YEARS Jahre dieser Region (per-Region, nicht global)."""
     if RECENT_YEARS is None: return g
-    cutoff = int(g["ordinal"].max()) - int(RECENT_YEARS * 372)  # 372 Ordinal-Einheiten = 1 Jahr
+    cutoff = int(g["ordinal"].max()) - int(RECENT_YEARS * 372)
     return g[g["ordinal"] >= cutoff]
 
 def _build_windows(weekly, skip_regions, features, stride=1):
@@ -328,7 +335,6 @@ def _build_val(weekly, val_regions, features):
     return X, np.vstack(yp)
 
 def load_or_build_windows(weekly, val_regions, features, t0):
-    """Lädt Windows-Cache oder berechnet neu. Invalidiert wenn Features/Val-Split ändern."""
     if WINDOWS_CACHE.exists():
         ck = dict(np.load(WINDOWS_CACHE, allow_pickle=True))
         same_feats = list(ck["feature_names"]) == features
@@ -339,10 +345,7 @@ def load_or_build_windows(weekly, val_regions, features, t0):
                 X = pd.DataFrame(ck[f"X_{prefix}"], columns=features)
                 X["region_id"] = pd.Categorical(ck[f"r_{prefix}"].astype(str).tolist())
                 return X, ck[f"y_{prefix}"]
-            X_tr, y_tr = _rebuild("tr")
-            X_va, y_va = _rebuild("va")
-            X_all, y_all = _rebuild("all")
-            return X_tr, y_tr, X_va, y_va, X_all, y_all
+            return *_rebuild("tr"), *_rebuild("va"), *_rebuild("all")
         reason = "Feature-Liste" if not same_feats else "Val-Regionen"
         print(f"   {reason} geändert — Windows neu berechnen ...")
 
@@ -365,20 +368,35 @@ def load_or_build_windows(weekly, val_regions, features, t0):
 
 
 # ─── Modell-Training ──────────────────────────────────────────────────────────
-def _train_lgb(X_tr, y_tr, X_va, y_va, n_trees=None):
-    models = []
-    for wk in range(5):
-        n = (n_trees[wk] if n_trees else None) or LGB_PARAMS["n_estimators"]
-        p = dict(LGB_PARAMS, random_state=RANDOM_STATE + wk, n_estimators=n)
-        m = lgb.LGBMRegressor(**p)
-        kw: dict = dict(categorical_feature=["region_id"])
-        if X_va is not None:
-            kw["eval_set"] = [(X_va, y_va[:, wk].ravel())]
-            kw["eval_metric"] = "mae"
-            kw["callbacks"] = [lgb.early_stopping(50, verbose=False)]
-        m.fit(X_tr, y_tr[:, wk].ravel(), **kw)
-        models.append(m)
-    return models
+def _train_lgb_multiseed(X_tr, y_tr, X_va, y_va, n_trees=None) -> tuple[list, list]:
+    """Trainiert N_LGB_SEEDS × 5 LGB-Modelle; gibt (models_per_seed, best_iters) zurück."""
+    seeds = [RANDOM_STATE + s * 100 for s in range(N_LGB_SEEDS)]
+    all_models = []
+    for seed in seeds:
+        models = []
+        for wk in range(5):
+            n = (n_trees[wk] if n_trees else None) or LGB_PARAMS["n_estimators"]
+            p = dict(LGB_PARAMS, random_state=seed + wk, n_estimators=n)
+            m = lgb.LGBMRegressor(**p)
+            kw: dict = dict(categorical_feature=["region_id"])
+            if X_va is not None:
+                kw["eval_set"] = [(X_va, y_va[:, wk].ravel())]
+                kw["eval_metric"] = "mae"
+                kw["callbacks"] = [lgb.early_stopping(50, verbose=False)]
+            m.fit(X_tr, y_tr[:, wk].ravel(), **kw)
+            models.append(m)
+        all_models.append(models)
+    best_iters = [max(_best_n(all_models[s][wk], N_ESTIMATORS) for s in range(N_LGB_SEEDS))
+                  for wk in range(5)]
+    return all_models, best_iters
+
+def _pred_lgb_multiseed(all_models: list, X) -> np.ndarray:
+    """Mittelt Predictions über alle Seeds."""
+    preds = np.zeros((len(X), 5), dtype=np.float64)
+    for models in all_models:
+        feat = models[0].booster_.feature_name()  # exakt die Spalten aus dem Training
+        preds += np.column_stack([m.predict(X[feat]) for m in models])
+    return np.clip(preds / len(all_models), 0, 5).astype(np.float32)
 
 def _train_xgb(X_tr, y_tr, X_va, y_va, features, n_trees=None):
     Xn = X_tr[features].to_numpy(np.float32)
@@ -414,10 +432,6 @@ def _train_cat(X_tr, y_tr, X_va, y_va, features, n_trees=None):
         models.append(m)
     return models
 
-def _pred_lgb(models, X):
-    feat = models[0].booster_.feature_name()  # exakt die Spalten aus dem Training
-    return np.clip(np.column_stack([m.predict(X[feat]) for m in models]), 0, 5).astype(np.float32)
-
 def _pred_num(models, X, features):
     Xn = X[features].to_numpy(np.float32)
     return np.clip(np.column_stack([m.predict(Xn) for m in models]), 0, 5).astype(np.float32)
@@ -441,28 +455,34 @@ def optimize_blend(y_va, preds: dict) -> tuple[dict, float]:
     return best_w, best_mae
 
 
-# ─── Feature Importance (LightGBM, Mittelwert über alle 5 Wochen-Modelle) ─────
-def print_feature_importance(lgb_models: list, top_n: int = 40) -> None:
-    feat_names = np.array(lgb_models[0].booster_.feature_name())
+# ─── Feature Importance ───────────────────────────────────────────────────────
+def print_feature_importance(all_models: list, top_n: int = 40) -> None:
+    # Alle Seeds zusammenfassen (Ø über Seeds und Wochen)
+    flat_models = [m for seed_models in all_models for m in seed_models]
+    feat_names = np.array(flat_models[0].booster_.feature_name())
     importance  = np.zeros(len(feat_names))
-    for m in lgb_models:
+    for m in flat_models:
         importance += m.booster_.feature_importance(importance_type="gain")
-    importance /= len(lgb_models)
+    importance /= len(flat_models)
     mask = feat_names != "region_id"
     feat_names = feat_names[mask]; importance = importance[mask]
     total = importance.sum(); order = np.argsort(importance)[::-1]
-    print(f"\n{'─'*64}")
-    print(f"  FEATURE IMPORTANCE  (LightGBM Gain, Ø Woche 1-5)")
-    print(f"{'─'*64}")
+    print(f"\n{'─'*66}")
+    print(f"  FEATURE IMPORTANCE  (LightGBM Gain, Ø über {N_LGB_SEEDS} Seeds × 5 Wochen)")
+    print(f"{'─'*66}")
     print(f"  {'Rank':<5}  {'Feature':<36}  {'Gain':>10}  {'%':>6}")
     for rank, i in enumerate(order[:top_n], 1):
         print(f"  {rank:<5d}  {feat_names[i]:<36}  {importance[i]:>10.0f}  {100*importance[i]/total:>5.2f}%")
-    print(f"\n  BOTTOM 10 (Noise-Kandidaten):")
+    print(f"\n  BOTTOM 10:")
     for i in order[-10:]:
         print(f"  {'':5}  {feat_names[i]:<36}  {importance[i]:>10.0f}  {100*importance[i]/total:>5.2f}%")
     print(f"\n  Top-10 kumulativ: {100*importance[order[:10]].sum()/total:.1f}% des Gains")
     print(f"  Features mit < 0.01% Gain: {(importance/total < 0.0001).sum()} Stück")
-    print(f"{'─'*64}")
+    # Score-Features hervorheben
+    score_mask  = np.array(["score" in n for n in feat_names])
+    score_total = importance[score_mask].sum()
+    print(f"  Score-Features gesamt: {100*score_total/total:.1f}% des Gains")
+    print(f"{'─'*66}")
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -471,22 +491,21 @@ def main() -> None:
     NUM_FEATURES = build_feature_list()
 
     t0 = time.time()
-    print("=" * 64)
-    print("  Drought Severity Prediction  —  run_v15.py")
+    print("=" * 66)
+    print("  Drought Severity Prediction  —  run_v17.py")
     print(f"  Mode: {'QUICK' if QUICK_MODE else 'FULL'}  |  stride={WINDOW_STRIDE}  trees={N_ESTIMATORS}")
-    print(f"  CatBoost: {'ON' if CATBOOST_AVAILABLE else 'OFF'}  |  RECENT_YEARS={RECENT_YEARS}")
-    print(f"  Features: {len(NUM_FEATURES)}  (v12 hatte ~138)")
-    print("=" * 64)
+    print(f"  LGB Seeds: {N_LGB_SEEDS}  |  XGB-Obj: reg:absoluteerror  |  CatBoost: {'ON' if CATBOOST_AVAILABLE else 'OFF'}")
+    print(f"  RECENT_YEARS={RECENT_YEARS}  |  Features: {len(NUM_FEATURES)}")
+    print("=" * 66)
 
     # ── 1. Wöchentliche Daten ─────────────────────────────────────────────────
     print(f"\n[1/5] Wöchentliche Daten laden ...")
     weekly, X_test_base, test_region_ids = load_weekly()
     print(f"   {len(weekly):,} Rows, {weekly['region_id'].nunique()} Regionen  |  [{elapsed(t0)}]")
 
-    # ── 2. V15-Features ───────────────────────────────────────────────────────
-    print(f"\n[2/5] V15-Features berechnen (Score-Lags, Seasonal Dev) ...")
-    weekly = add_v15_features(weekly)
-    last_score = weekly.sort_values("ordinal").groupby("region_id")["score"].last()
+    # ── 2. V17-Features ───────────────────────────────────────────────────────
+    print(f"\n[2/5] V17-Features berechnen ...")
+    weekly = add_v17_features(weekly)
     for f in NUM_FEATURES:
         if f not in weekly.columns: weekly[f] = np.float32(0)
     print(f"   Done  |  [{elapsed(t0)}]")
@@ -502,36 +521,32 @@ def main() -> None:
     print(f"   Train: {len(X_tr):,}  Val: {len(X_va):,}  All: {len(X_all):,}")
 
     # Baselines
-    persist_va = np.column_stack(
-        [last_score.reindex(sorted(val_regions)).fillna(0).to_numpy()] * 5
-    )
-    show_mae("Persistence-Baseline (letzter Score wiederholt)", y_va, persist_va)
-    show_mae("score_lag1 wiederholt", y_va,
+    last_score = weekly.sort_values("ordinal").groupby("region_id")["score"].last()
+    show_mae("score_lag1 Persistence", y_va,
              np.column_stack([X_va["score_lag1"].to_numpy()] * 5))
 
     # ── 4. Training ───────────────────────────────────────────────────────────
     print(f"\n[4/5] Training  |  [{elapsed(t0)}]")
 
-    print("  LightGBM (5 Modelle, je 1 pro Vorhersage-Woche) ...")
-    lgb_models = _train_lgb(X_tr, y_tr, X_va, y_va)
-    lgb_val    = _pred_lgb(lgb_models, X_va)
-    show_mae("LightGBM (gesamt)", y_va, lgb_val)
+    print(f"  LightGBM ({N_LGB_SEEDS} Seeds × 5 Modelle) ...")
+    lgb_all_models, lgb_best_iters = _train_lgb_multiseed(X_tr, y_tr, X_va, y_va)
+    lgb_val = _pred_lgb_multiseed(lgb_all_models, X_va)
+    show_mae(f"LightGBM ({N_LGB_SEEDS} Seeds, Ø)", y_va, lgb_val)
     for wk in range(5):
-        n = _best_n(lgb_models[wk], N_ESTIMATORS)
-        v = mae(y_va[:, wk], np.clip(lgb_models[wk].predict(X_va), 0, 5))
-        print(f"    Woche {wk+1}: best_iter={n:4d}  MAE={v:.4f}")
+        v = mae(y_va[:, wk], np.clip(lgb_all_models[0][wk].predict(X_va), 0, 5))
+        print(f"    Woche {wk+1}: best_iter≈{lgb_best_iters[wk]:4d}  MAE={v:.4f}")
 
-    print("  XGBoost (5 Modelle) ...")
+    print("  XGBoost (MAE-Objective, 5 Modelle) ...")
     xgb_models = _train_xgb(X_tr, y_tr, X_va, y_va, NUM_FEATURES)
     xgb_val    = _pred_num(xgb_models, X_va, NUM_FEATURES)
-    show_mae("XGBoost (gesamt)", y_va, xgb_val)
+    show_mae("XGBoost (reg:absoluteerror)", y_va, xgb_val)
 
     cat_val, cat_models = None, None
     if CATBOOST_AVAILABLE:
         print("  CatBoost (5 Modelle) ...")
         cat_models = _train_cat(X_tr, y_tr, X_va, y_va, NUM_FEATURES)
         cat_val    = _pred_num(cat_models, X_va, NUM_FEATURES)
-        show_mae("CatBoost (gesamt)", y_va, cat_val)
+        show_mae("CatBoost", y_va, cat_val)
 
     preds_val = {"lgb": lgb_val, "xgb": xgb_val}
     if cat_val is not None: preds_val["cat"] = cat_val
@@ -539,24 +554,21 @@ def main() -> None:
     w_str = "  ".join(f"{k.upper()}={v:.2f}" for k, v in best_w.items())
     print(f"\n  Blend: {w_str}  →  MAE={best_val_mae:.4f}")
 
-    # Feature Importance (LightGBM, Ø aller 5 Modelle)
-    print_feature_importance(lgb_models, top_n=40)
+    print_feature_importance(lgb_all_models, top_n=40)
 
     if QUICK_MODE:
-        print("\n  QUICK_MODE=True — kein Final-Training, keine Submission.")
-        print(f"  Gesamtlaufzeit: {elapsed(t0)}\n")
+        print(f"\n  QUICK_MODE — kein Final-Training. Laufzeit: {elapsed(t0)}\n")
         return
 
     # ── 5. Final Training + Submission ───────────────────────────────────────
     print(f"\n[5/5] Final Training (alle Regionen)  |  [{elapsed(t0)}]")
-    n_lgb = [_best_n(m, N_ESTIMATORS) for m in lgb_models]
-    n_xgb = [_best_n(m, N_ESTIMATORS) for m in xgb_models]
-    final_lgb = _train_lgb(X_all, y_all, None, None, n_lgb)
-    final_xgb = _train_xgb(X_all, y_all, None, None, NUM_FEATURES, n_xgb)
+    final_lgb_all, _ = _train_lgb_multiseed(X_all, y_all, None, None, lgb_best_iters)
+    xgb_best_iters   = [_best_n(m, N_ESTIMATORS) for m in xgb_models]
+    final_xgb        = _train_xgb(X_all, y_all, None, None, NUM_FEATURES, xgb_best_iters)
     final_cat = None
     if CATBOOST_AVAILABLE and cat_models:
-        n_cat     = [_best_n(m, N_ESTIMATORS) for m in cat_models]
-        final_cat = _train_cat(X_all, y_all, None, None, NUM_FEATURES, n_cat)
+        cat_best_iters = [_best_n(m, N_ESTIMATORS) for m in cat_models]
+        final_cat = _train_cat(X_all, y_all, None, None, NUM_FEATURES, cat_best_iters)
     print(f"   Done  |  [{elapsed(t0)}]")
 
     # Test-Features aufbauen
@@ -564,7 +576,7 @@ def main() -> None:
     X_test = pd.DataFrame(X_test_base, columns=cache_base_cols)
     X_test["region_id"] = pd.Categorical(test_region_ids)
 
-    # Score-Lags: echte letzte Trainingswerte pro Region (nicht Kopie von lag1)
+    # Score-Lags: echte letzte Trainingswerte pro Region
     _recent = {
         region: g["score"].tolist()
         for region, g in weekly.sort_values("ordinal").groupby("region_id")
@@ -572,10 +584,22 @@ def main() -> None:
     def _get_lag(region: str, k: int) -> float:
         sc = _recent.get(region, [0.0])
         return float(sc[-k]) if len(sc) >= k else float(sc[0])
-    for k, col in enumerate(["score_lag1","score_lag2","score_lag3","score_lag4","score_lag5"], 1):
+
+    for k in range(1, 8):
+        col = f"score_lag{k}"
         X_test[col] = np.array([_get_lag(r, k) for r in test_region_ids], dtype=np.float32)
 
-    # Seasonal Dev: letzte bekannte saisonale Abweichung aus wöchentlichen Trainingsdaten
+    # Score-Rolling aus letzten Trainingswochen
+    lag_vals = np.array(
+        [[_get_lag(r, k) for k in range(1, 9)] for r in test_region_ids],
+        dtype=np.float32,
+    )  # shape: (n_regions, 8), Spalte 0 = neuester Score
+    X_test["score_mean_4w"] = lag_vals[:, :4].mean(axis=1)
+    X_test["score_std_4w"]  = lag_vals[:, :4].std(axis=1)
+    X_test["score_mean_8w"] = lag_vals[:, :8].mean(axis=1)
+    X_test["score_trend"]   = lag_vals[:, 0] - lag_vals[:, 4]  # lag1 - lag5
+
+    # Seasonal Dev: letzte bekannte saisonale Abweichung
     last_w = weekly.sort_values("ordinal").groupby("region_id").last()
     for col in ["prec_seasonal_dev", "humidity_seasonal_dev", "tmp_seasonal_dev"]:
         if col in last_w.columns:
@@ -583,11 +607,10 @@ def main() -> None:
         else:
             X_test[col] = np.float32(0)
 
-    # Fehlende Features auf 0 (Fallback)
     for f in NUM_FEATURES:
         if f not in X_test.columns: X_test[f] = np.float32(0)
 
-    lgb_test   = _pred_lgb(final_lgb, X_test)
+    lgb_test   = _pred_lgb_multiseed(final_lgb_all, X_test)
     xgb_test   = _pred_num(final_xgb, X_test, NUM_FEATURES)
     test_preds = best_w["lgb"] * lgb_test + best_w["xgb"] * xgb_test
     if final_cat is not None and "cat" in best_w:
@@ -600,11 +623,11 @@ def main() -> None:
     for col in [f"pred_week{k+1}" for k in range(5)]: sub[col] = sub[col].fillna(0.0)
     sub.to_csv(OUT_PATH, index=False)
 
-    print(f"\n{'='*64}")
+    print(f"\n{'='*66}")
     print(f"  Submission: {OUT_PATH}  ({len(sub):,} Rows)")
-    print(f"  Val MAE: {best_val_mae:.4f}  (lokale Val ≠ Kaggle-Score)")
+    print(f"  Val MAE: {best_val_mae:.4f}")
     print(f"  Gesamtlaufzeit: {elapsed(t0)}")
-    print(f"{'='*64}\n")
+    print(f"{'='*66}\n")
 
 
 if __name__ == "__main__":
