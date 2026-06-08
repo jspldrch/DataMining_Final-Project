@@ -3,11 +3,6 @@ title: "Drought Severity Prediction – Ergebnisse & Analyse"
 author: "Jana Speldrich"
 date: last-modified
 format:
-  html:
-    toc: true
-    toc-depth: 3
-    code-fold: true
-    theme: cosmo
   pdf:
     toc: true
 execute:
@@ -34,7 +29,8 @@ Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
 |--------|:-:|:-:|:-:|:-:|:-:|---|
 | **recent_local** *(CSV, holdout)* | 20%-Holdout | 8 | 0.2661 | **0.8095 ✓✓** | **−0.0163** | **Bestes Modell** |
 | v24 (8y + seasonal_mean) | Last-window all | 8 | 0.2314 | 0.8106 ✓✓ | −0.0152 | 2. bestes! |
-| v22 *(Kaggle NB3, last-window)* | Last-window all | 5 | 0.2342 | 0.8132 ✓ | −0.0126 | |
+| v22 *(NB3, 5y, last-window)* | Last-window all | 5 | 0.2342 | 0.8132 ✓ | −0.0126 | |
+| v22_recent8 *(NB3, 8y, last-window)* | Last-window all | 8 | 0.2342 | 0.8132 ✓ | −0.0126 | = v22 5y! |
 | v25 (Last-year val, 52w/region) | Last-year (52 Win.) | 9 | — | 0.8163 | −0.0095 | |
 | v21b (LR=0.02, N=2000, ×1.1) | Last-window all | 15 | 0.2528 | 0.8192 ✓ | −0.0066 | ≈v19 |
 | v19 *(Last-window all regions)* | Last-window all | 15 | 0.2522 | 0.8193 ✓ | −0.0065 | |
@@ -53,7 +49,7 @@ Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
 
 > **Kernbeobachtung:** **recent_local (8y, Kaggle 0.8095) = bestes Modell.**
 > **v24 (8y + seasonal_mean, 0.8106) = zweitbestes** — knapp dahinter und auf Kaggle stärker als v22 5y (0.8132).
-> **RECENT_YEARS-Sweep (last-window val):** 5y=0.8132  7y=0.8270(!)  8y=laufend  15y=0.8193 → 7y ist ein überraschender Ausreißer nach oben (schlechter), nicht der erwartete Mittelwert.
+> **RECENT_YEARS-Sweep (last-window val):** 5y=0.8132  7y=0.8270(!)  **8y=0.8132** (= 5y!)  15y=0.8193 → 7y einziger Ausreißer. 5y und 8y last-window identisch — Vorteil von 8y nur mit Holdout-Val (0.8095).
 > `regional_seasonal_mean` (Rang 7, 2.9%) hilft: v24 verbessert v22 um 0.0026.
 
 ---
@@ -246,10 +242,10 @@ v22_recent8 Ergebnisse:
 v22 braucht mehr Bäume (avg ~750 vs 477). Mit weniger Trainings-Windows ist jeder Baum wertvoller — früheres Stoppen war suboptimal bei v19.
 
 **Schlussfolgerung:**
-Der Recent-Filter (letzte 8 Jahre) hilft. Die Frage ist: was ist das optimale Fenster?
+Der Recent-Filter (8 Jahre) verbessert gegenüber 15 Jahren (0.8132 < 0.8193). 8y und 5y ergeben jedoch **identische Kaggle-MAE (0.8132)** — der Vorteil von 8y über 5y ist nur mit Holdout-Val messbar (0.8095 vs. 0.8654).
 
-> **Merksatz:** Wenn Val und Kaggle gemeinsam besser werden → das Daten-Window passt besser
-> zum Test-Set. Der Recent-Filter reduziert Verteilungs-Drift zwischen älteren und neueren Perioden.
+> **Merksatz:** Der Recent-Filter reduziert Verteilungs-Drift, aber das Val-Schema (Holdout vs. Last-Window)
+> entscheidet, ob der Vorteil bei Early Stopping sichtbar wird.
 
 ---
 
@@ -263,6 +259,7 @@ RECENT_YEARS=5  (33% der Daten):
   local 5y    (20%-holdout val,  449 pts): 0.8654  (CSV)
 
 RECENT_YEARS=8  (53% der Daten):
+  v22_recent8 (last-window val, 2248 pts): 0.8132  (NB3) ← = 5y last-window!
   local 8y    (20%-holdout val,  449 pts): 0.8095  (CSV) ← BEST
 
 RECENT_YEARS=15 (100% der Daten):
@@ -272,11 +269,12 @@ RECENT_YEARS=15 (100% der Daten):
 
 **Der RECENT_YEARS-Effekt:**
 
-| RECENT_YEARS | Datenanteil | Kaggle (best. Val-Schema) | Interpretation |
-|:-:|:-:|:-:|---|
-| 5 | 33% | 0.8132 | zu wenig Daten → unterfit |
-| **8** | **53%** | **0.8095** | **Sweet Spot!** |
-| 15 | 100% | 0.8193 | alte Muster bremsen Generalisierung |
+| RECENT_YEARS | Datenanteil | Last-Window Val | Holdout Val | Interpretation |
+|:-:|:-:|:-:|:-:|---|
+| 5 | 33% | 0.8132 | 0.8654 | last-window kompensiert; holdout zeigt underfit |
+| 7 | 47% | 0.8270 ✗ | — | LGB-Limit Wo2+4 → underfit |
+| **8** | **53%** | 0.8132 | **0.8095** | **Sweet Spot sichtbar nur mit Holdout!** |
+| 15 | 100% | 0.8193 | 0.8258 | alte Muster bremsen Generalisierung |
 
 **Was erklärt den Sweet Spot bei 8 Jahren?**
 
@@ -306,10 +304,16 @@ Mit holdout (449 pts) trifft LGB das Iterations-Limit → unkontrolliertes Train
 | local 8y, holdout | 215/999/1000/982/998 | Woche 2-5 am Limit |
 | Kaggle v22, 15y (v19) | 477/700/388/363/358 | Gut kalibriert ✓ |
 
-**Kritischer nächster Schritt:**
-`recent_local` (8y + holdout) = 0.8095, aber Kaggle v22 (5y + last-window) = 0.8132.
-Wenn wir **8 Jahre + last-window-val** kombinieren → erwartete Verbesserung auf ~0.79–0.80.
-Die Kombination aus bestem RECENT_YEARS (8y) und bestem Val-Schema (last-window) wurde noch nicht getestet!
+**Ergebnis — 8y + last-window jetzt getestet:**
+`v22_recent8` (8y + last-window) = **0.8132** — identisch mit v22 5y. Kein Vorteil von 8y über 5y mit last-window val!
+`recent_local` (8y + holdout) = **0.8095** bleibt das beste Ergebnis.
+
+| Val-Schema | RY=5 | RY=8 |
+|---|:-:|:-:|
+| Last-Window (2248 pts) | 0.8132 | 0.8132 (= 5y!) |
+| Holdout (449 pts) | 0.8654 | **0.8095** |
+
+Der Vorteil von RECENT_YEARS=8 ist nur mit Holdout-Val sichtbar. Last-Window gibt für 5y und 8y dasselbe Ergebnis — beide Val-Schemata kalibrieren Early Stopping anders, aber last-window nivelliert den Unterschied.
 
 ---
 

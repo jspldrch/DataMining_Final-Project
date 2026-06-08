@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.33">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Jana Speldrich">
+<meta name="dcterms.date" content="2026-06-08">
+
+<title>Drought Severity Prediction – Ergebnisse &amp; Analyse</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="results_files/libs/clipboard/clipboard.min.js"></script>
+<script src="results_files/libs/quarto-html/quarto.js"></script>
+<script src="results_files/libs/quarto-html/popper.min.js"></script>
+<script src="results_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="results_files/libs/quarto-html/anchor.min.js"></script>
+<link href="results_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="results_files/libs/quarto-html/quarto-syntax-highlighting-07ba0ad10f5680c660e360ac31d2f3b6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="results_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="results_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="results_files/libs/bootstrap/bootstrap-545cdd561de3535e9b364c647f747893.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#überblick" id="toc-überblick" class="nav-link active" data-scroll-target="#überblick">Überblick</a></li>
+  <li><a href="#ergebnisse" id="toc-ergebnisse" class="nav-link" data-scroll-target="#ergebnisse">Ergebnisse</a>
+  <ul class="collapse">
+  <li><a href="#kaggle-scores-im-überblick" id="toc-kaggle-scores-im-überblick" class="nav-link" data-scroll-target="#kaggle-scores-im-überblick">Kaggle-Scores im Überblick</a></li>
+  <li><a href="#implementierungsunterschiede" id="toc-implementierungsunterschiede" class="nav-link" data-scroll-target="#implementierungsunterschiede">Implementierungsunterschiede</a></li>
+  <li><a href="#feature-importance-lightgbm-gain" id="toc-feature-importance-lightgbm-gain" class="nav-link" data-scroll-target="#feature-importance-lightgbm-gain">Feature Importance (LightGBM Gain)</a>
+  <ul class="collapse">
+  <li><a href="#v19-und-v20-kein-score_lag-aktuellste-runs" id="toc-v19-und-v20-kein-score_lag-aktuellste-runs" class="nav-link" data-scroll-target="#v19-und-v20-kein-score_lag-aktuellste-runs">v19 und v20 — kein score_lag (aktuellste Runs)</a></li>
+  <li><a href="#v21a-feature-shift-durch-längere-rolling-fenster-270d-365d" id="toc-v21a-feature-shift-durch-längere-rolling-fenster-270d-365d" class="nav-link" data-scroll-target="#v21a-feature-shift-durch-längere-rolling-fenster-270d-365d">v21a — Feature-Shift durch längere Rolling-Fenster (270d + 365d)</a></li>
+  <li><a href="#v22_recent8-feature-shift-durch-recent-filter" id="toc-v22_recent8-feature-shift-durch-recent-filter" class="nav-link" data-scroll-target="#v22_recent8-feature-shift-durch-recent-filter">v22_recent8 — Feature-Shift durch Recent-Filter</a></li>
+  <li><a href="#ältere-runs-mit-score_lag" id="toc-ältere-runs-mit-score_lag" class="nav-link" data-scroll-target="#ältere-runs-mit-score_lag">Ältere Runs — mit score_lag</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#analyse-warum-score_lag-schadet" id="toc-analyse-warum-score_lag-schadet" class="nav-link" data-scroll-target="#analyse-warum-score_lag-schadet">Analyse: Warum score_lag schadet</a>
+  <ul class="collapse">
+  <li><a href="#das-staleness-problem" id="toc-das-staleness-problem" class="nav-link" data-scroll-target="#das-staleness-problem">Das Staleness-Problem</a></li>
+  <li><a href="#v18-gap-simulation-ergebnisse-interpretation" id="toc-v18-gap-simulation-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v18-gap-simulation-ergebnisse-interpretation">v18: Gap-Simulation — Ergebnisse &amp; Interpretation</a></li>
+  <li><a href="#v22_recent8-recent-filter-ergebnisse-interpretation" id="toc-v22_recent8-recent-filter-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v22_recent8-recent-filter-ergebnisse-interpretation">v22_recent8: Recent-Filter — Ergebnisse &amp; Interpretation</a></li>
+  <li><a href="#recent_years-sweep-vollständige-ergebnisse" id="toc-recent_years-sweep-vollständige-ergebnisse" class="nav-link" data-scroll-target="#recent_years-sweep-vollständige-ergebnisse">RECENT_YEARS Sweep — Vollständige Ergebnisse</a></li>
+  <li><a href="#v24-8-jahre-seasonal-mean-ergebnisse-interpretation" id="toc-v24-8-jahre-seasonal-mean-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v24-8-jahre-seasonal-mean-ergebnisse-interpretation">v24: 8 Jahre + Seasonal Mean — Ergebnisse &amp; Interpretation</a></li>
+  <li><a href="#v26-recent_years7-überraschender-ausreißer" id="toc-v26-recent_years7-überraschender-ausreißer" class="nav-link" data-scroll-target="#v26-recent_years7-überraschender-ausreißer">v26: RECENT_YEARS=7 — Überraschender Ausreißer</a></li>
+  <li><a href="#v21a-längere-rolling-fenster-270d-365d-ergebnisse-interpretation" id="toc-v21a-längere-rolling-fenster-270d-365d-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v21a-längere-rolling-fenster-270d-365d-ergebnisse-interpretation">v21a: Längere Rolling-Fenster (270d + 365d) — Ergebnisse &amp; Interpretation</a></li>
+  <li><a href="#v21b-mehr-bäume-lr0.02-n2000-1.1-ergebnisse-interpretation" id="toc-v21b-mehr-bäume-lr0.02-n2000-1.1-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v21b-mehr-bäume-lr0.02-n2000-1.1-ergebnisse-interpretation">v21b: Mehr Bäume (LR=0.02, N=2000, ×1.1) — Ergebnisse &amp; Interpretation</a></li>
+  <li><a href="#v25-last-year-validation-52-fensterregion-ergebnisse-interpretation" id="toc-v25-last-year-validation-52-fensterregion-ergebnisse-interpretation" class="nav-link" data-scroll-target="#v25-last-year-validation-52-fensterregion-ergebnisse-interpretation">v25: Last-Year Validation (52 Fenster/Region) — Ergebnisse &amp; Interpretation</a></li>
+  </ul></li>
+  <li><a href="#validierungsschema-analyse-alternativen" id="toc-validierungsschema-analyse-alternativen" class="nav-link" data-scroll-target="#validierungsschema-analyse-alternativen">Validierungsschema – Analyse &amp; Alternativen</a>
+  <ul class="collapse">
+  <li><a href="#aktuelles-schema" id="toc-aktuelles-schema" class="nav-link" data-scroll-target="#aktuelles-schema">Aktuelles Schema</a></li>
+  <li><a href="#unbekannte-teststruktur" id="toc-unbekannte-teststruktur" class="nav-link" data-scroll-target="#unbekannte-teststruktur">Unbekannte Teststruktur</a></li>
+  <li><a href="#alternative-validierungsstrategien" id="toc-alternative-validierungsstrategien" class="nav-link" data-scroll-target="#alternative-validierungsstrategien">Alternative Validierungsstrategien</a>
+  <ul class="collapse">
+  <li><a href="#option-1-time-based-split-empfohlen-als-vergleich" id="toc-option-1-time-based-split-empfohlen-als-vergleich" class="nav-link" data-scroll-target="#option-1-time-based-split-empfohlen-als-vergleich">Option 1: Time-based Split (empfohlen als Vergleich)</a></li>
+  <li><a href="#option-2-gap-simulation-realistischstes-val-schema" id="toc-option-2-gap-simulation-realistischstes-val-schema" class="nav-link" data-scroll-target="#option-2-gap-simulation-realistischstes-val-schema">Option 2: Gap-Simulation (realistischstes Val-Schema)</a></li>
+  <li><a href="#option-3-gemischte-strategie" id="toc-option-3-gemischte-strategie" class="nav-link" data-scroll-target="#option-3-gemischte-strategie">Option 3: Gemischte Strategie</a></li>
+  </ul></li>
+  <li><a href="#empfehlung-was-testen" id="toc-empfehlung-was-testen" class="nav-link" data-scroll-target="#empfehlung-was-testen">Empfehlung: Was testen?</a></li>
+  </ul></li>
+  <li><a href="#nächste-schritte" id="toc-nächste-schritte" class="nav-link" data-scroll-target="#nächste-schritte">Nächste Schritte</a></li>
+  <li><a href="#technische-details" id="toc-technische-details" class="nav-link" data-scroll-target="#technische-details">Technische Details</a>
+  <ul class="collapse">
+  <li><a href="#datenstruktur-npz" id="toc-datenstruktur-npz" class="nav-link" data-scroll-target="#datenstruktur-npz">Datenstruktur NPZ</a></li>
+  <li><a href="#cache-strategie" id="toc-cache-strategie" class="nav-link" data-scroll-target="#cache-strategie">Cache-Strategie</a></li>
+  <li><a href="#modell-parameter-alle-scripts" id="toc-modell-parameter-alle-scripts" class="nav-link" data-scroll-target="#modell-parameter-alle-scripts">Modell-Parameter (alle Scripts)</a></li>
+  </ul></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="results.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Drought Severity Prediction – Ergebnisse &amp; Analyse</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Jana Speldrich </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">June 8, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="überblick" class="level1">
+<h1>Überblick</h1>
+<p>Kaggle-Wettbewerb zur Vorhersage von Dürreschwere (Score 0–5) für <strong>2.248 Regionen</strong>, jeweils <strong>5 Wochen</strong> in die Zukunft. Metrik: <strong>MAE</strong> (Mean Absolute Error), niedriger = besser.</p>
+<ul>
+<li>Trainingsdaten: täglich, ~13 Jahre pro Region (Ordinal-Jahre 1000–8133)</li>
+<li>Testdaten: 91 Tage pro Region (kein Score vorhanden)</li>
+<li>Limit: 3 Submissions pro Tag</li>
+</ul>
+<hr>
+</section>
+<section id="ergebnisse" class="level1">
+<h1>Ergebnisse</h1>
+<section id="kaggle-scores-im-überblick" class="level2">
+<h2 class="anchored" data-anchor-id="kaggle-scores-im-überblick">Kaggle-Scores im Überblick</h2>
+<table class="table-striped table-hover caption-top table">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Script</th>
+<th style="text-align: center;">Val-Schema</th>
+<th style="text-align: center;">RECENT_YEARS</th>
+<th style="text-align: center;">Val MAE</th>
+<th style="text-align: center;"><strong>Kaggle MAE</strong></th>
+<th style="text-align: center;">Δ vs.&nbsp;v12</th>
+<th>Bemerkung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>recent_local</strong> <em>(CSV, holdout)</em></td>
+<td style="text-align: center;">20%-Holdout</td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">0.2661</td>
+<td style="text-align: center;"><strong>0.8095 ✓✓</strong></td>
+<td style="text-align: center;"><strong>−0.0163</strong></td>
+<td><strong>Bestes Modell</strong></td>
+</tr>
+<tr class="even">
+<td>v24 (8y + seasonal_mean)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">0.2314</td>
+<td style="text-align: center;">0.8106 ✓✓</td>
+<td style="text-align: center;">−0.0152</td>
+<td>2. bestes!</td>
+</tr>
+<tr class="odd">
+<td>v22 <em>(Kaggle NB3, last-window)</em></td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">0.2342</td>
+<td style="text-align: center;">0.8132 ✓</td>
+<td style="text-align: center;">−0.0126</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>v25 (Last-year val, 52w/region)</td>
+<td style="text-align: center;">Last-year (52 Win.)</td>
+<td style="text-align: center;">9</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">0.8163</td>
+<td style="text-align: center;">−0.0095</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>v21b (LR=0.02, N=2000, ×1.1)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.2528</td>
+<td style="text-align: center;">0.8192 ✓</td>
+<td style="text-align: center;">−0.0066</td>
+<td>≈v19</td>
+</tr>
+<tr class="even">
+<td>v19 <em>(Last-window all regions)</em></td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.2522</td>
+<td style="text-align: center;">0.8193 ✓</td>
+<td style="text-align: center;">−0.0065</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>v12</strong> <em>(Baseline)</em></td>
+<td style="text-align: center;">20%-Holdout</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">~0.04</td>
+<td style="text-align: center;">0.8258</td>
+<td style="text-align: center;">—</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>v26 (7y, last-window)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">7</td>
+<td style="text-align: center;">0.2273</td>
+<td style="text-align: center;">0.8270 ✗</td>
+<td style="text-align: center;">+0.0012</td>
+<td>7y = Loch!</td>
+</tr>
+<tr class="odd">
+<td>v21a (ROLL_WINS +270d+365d)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.2272</td>
+<td style="text-align: center;">0.8671 ✗</td>
+<td style="text-align: center;">+0.041</td>
+<td>91d-Grenze!</td>
+</tr>
+<tr class="even">
+<td>recent20_local <em>(CSV, holdout)</em></td>
+<td style="text-align: center;">20%-Holdout</td>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">0.2323</td>
+<td style="text-align: center;">0.8654 ✗</td>
+<td style="text-align: center;">+0.040</td>
+<td>5y zu wenig</td>
+</tr>
+<tr class="odd">
+<td>v20 (Schema A, K=5 Val-Fenster)</td>
+<td style="text-align: center;">Schema A</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.2814</td>
+<td style="text-align: center;">0.8728 ✗</td>
+<td style="text-align: center;">+0.047</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>v18</strong> (gap=13 score_lag)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.1831</td>
+<td style="text-align: center;">0.9134 ✗</td>
+<td style="text-align: center;">+0.088</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>v16_chain (autoregressive)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.5213</td>
+<td style="text-align: center;">0.9863 ✗</td>
+<td style="text-align: center;">+0.161</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>v15 (score_lag1-5, seasonal dev)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.1058</td>
+<td style="text-align: center;">1.0470 ✗</td>
+<td style="text-align: center;">+0.221</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>v17 (score_lag1-7, rolling, XGB-MAE)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">0.0681</td>
+<td style="text-align: center;">1.0815 ✗</td>
+<td style="text-align: center;">+0.256</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>v23 (ROLL_WINS ≤90d + LR=0.02 N=2000)</td>
+<td style="text-align: center;">Last-window all</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"><em>ausstehend</em></td>
+<td style="text-align: center;"></td>
+<td>NB1</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p><strong>Kernbeobachtung:</strong> <strong>recent_local (8y, Kaggle 0.8095) = bestes Modell.</strong> <strong>v24 (8y + seasonal_mean, 0.8106) = zweitbestes</strong> — knapp dahinter und auf Kaggle stärker als v22 5y (0.8132). <strong>RECENT_YEARS-Sweep (last-window val):</strong> 5y=0.8132 7y=0.8270(!) 8y=laufend 15y=0.8193 → 7y ist ein überraschender Ausreißer nach oben (schlechter), nicht der erwartete Mittelwert. <code>regional_seasonal_mean</code> (Rang 7, 2.9%) hilft: v24 verbessert v22 um 0.0026.</p>
+</blockquote>
+<hr>
+</section>
+<section id="implementierungsunterschiede" class="level2">
+<h2 class="anchored" data-anchor-id="implementierungsunterschiede">Implementierungsunterschiede</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Feature / Design</th>
+<th style="text-align: center;">v12</th>
+<th style="text-align: center;">v15</th>
+<th style="text-align: center;">v16_chain</th>
+<th style="text-align: center;">v17</th>
+<th style="text-align: center;">kaggle_v1</th>
+<th style="text-align: center;">kaggle_v2</th>
+<th style="text-align: center;">kaggle_v3</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>score_lag1/2/3</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+</tr>
+<tr class="even">
+<td>score_lag4-7</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="odd">
+<td>score rolling (mean_4w etc.)</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="even">
+<td>seasonal deviation</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;"><strong>✓</strong></td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="odd">
+<td>chain forecasting</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;"><strong>✓</strong></td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="even">
+<td>wind_roll_* (Noise)</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+</tr>
+<tr class="odd">
+<td>XGBoost MAE-Objective</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="even">
+<td>X_test = letzter Test-Tag</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗</td>
+</tr>
+<tr class="odd">
+<td>X_test = letzter Train-Tag</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;"><strong>✓</strong></td>
+</tr>
+<tr class="even">
+<td>LGB + XGB + CatBoost</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✗ (LGB only)</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+</tr>
+<tr class="odd">
+<td>Multi-Seed LGB</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✓ (2 Seeds)</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">✗</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+<section id="feature-importance-lightgbm-gain" class="level2">
+<h2 class="anchored" data-anchor-id="feature-importance-lightgbm-gain">Feature Importance (LightGBM Gain)</h2>
+<section id="v19-und-v20-kein-score_lag-aktuellste-runs" class="level3">
+<h3 class="anchored" data-anchor-id="v19-und-v20-kein-score_lag-aktuellste-runs">v19 und v20 — kein score_lag (aktuellste Runs)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th style="text-align: center;"><strong>v19</strong></th>
+<th style="text-align: center;"><strong>v20</strong> (Schema A)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>prec_roll180_mean</td>
+<td style="text-align: center;"><strong>16.20 %</strong></td>
+<td style="text-align: center;">16.49 %</td>
+</tr>
+<tr class="even">
+<td>prec_roll90_mean</td>
+<td style="text-align: center;">14.02 %</td>
+<td style="text-align: center;">14.27 %</td>
+</tr>
+<tr class="odd">
+<td>tmp_roll180_max</td>
+<td style="text-align: center;">11.54 %</td>
+<td style="text-align: center;">12.06 %</td>
+</tr>
+<tr class="even">
+<td>prec_roll60_mean</td>
+<td style="text-align: center;">8.04 %</td>
+<td style="text-align: center;">8.37 %</td>
+</tr>
+<tr class="odd">
+<td>regional_mean_score</td>
+<td style="text-align: center;">5.41 %</td>
+<td style="text-align: center;">5.64 %</td>
+</tr>
+<tr class="even">
+<td>prec_deficit_90d</td>
+<td style="text-align: center;">3.66 %</td>
+<td style="text-align: center;">3.64 %</td>
+</tr>
+<tr class="odd">
+<td>prec_roll180_std</td>
+<td style="text-align: center;">2.43 %</td>
+<td style="text-align: center;">2.45 %</td>
+</tr>
+<tr class="even">
+<td>wind_roll180_mean</td>
+<td style="text-align: center;">2.35 %</td>
+<td style="text-align: center;">2.35 %</td>
+</tr>
+<tr class="odd">
+<td>tmp_roll90_max</td>
+<td style="text-align: center;">2.17 %</td>
+<td style="text-align: center;">2.28 %</td>
+</tr>
+<tr class="even">
+<td>tmp_roll180_mean</td>
+<td style="text-align: center;">1.71 %</td>
+<td style="text-align: center;">1.64 %</td>
+</tr>
+</tbody>
+</table>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Gruppe</th>
+<th style="text-align: center;">v19</th>
+<th style="text-align: center;">v20</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Rolling Stats</td>
+<td style="text-align: center;"><strong>79.5 %</strong></td>
+<td style="text-align: center;">79.8 %</td>
+</tr>
+<tr class="even">
+<td>Dürre-Indices</td>
+<td style="text-align: center;">7.1 %</td>
+<td style="text-align: center;">6.8 %</td>
+</tr>
+<tr class="odd">
+<td>regional_mean</td>
+<td style="text-align: center;">5.4 %</td>
+<td style="text-align: center;">5.6 %</td>
+</tr>
+<tr class="even">
+<td>Lags</td>
+<td style="text-align: center;">5.3 %</td>
+<td style="text-align: center;">5.2 %</td>
+</tr>
+<tr class="odd">
+<td>Wetter (direkt)</td>
+<td style="text-align: center;">1.8 %</td>
+<td style="text-align: center;">1.7 %</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p>Rolling Stats dominieren mit ~80 % — lange Zeitfenster (90d, 180d) für Niederschlag und Temperatur sind entscheidend. <code>prec_roll180_mean</code> ist konsistent das wichtigste Feature. Kein score_lag benötigt.</p>
+</blockquote>
+</section>
+<section id="v21a-feature-shift-durch-längere-rolling-fenster-270d-365d" class="level3">
+<h3 class="anchored" data-anchor-id="v21a-feature-shift-durch-längere-rolling-fenster-270d-365d">v21a — Feature-Shift durch längere Rolling-Fenster (270d + 365d)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Gruppe</th>
+<th style="text-align: center;">v19 (180d max)</th>
+<th style="text-align: center;"><strong>v21a (365d max)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Rolling Stats</td>
+<td style="text-align: center;">79.5 %</td>
+<td style="text-align: center;"><strong>90.6 %</strong></td>
+</tr>
+<tr class="even">
+<td>davon roll270</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">16.4 % (NEU)</td>
+</tr>
+<tr class="odd">
+<td>davon roll365</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"><strong>38.2 % (NEU)</strong></td>
+</tr>
+<tr class="even">
+<td>Dürre-Indices</td>
+<td style="text-align: center;">7.1 %</td>
+<td style="text-align: center;">1.8 %</td>
+</tr>
+<tr class="odd">
+<td>regional_mean</td>
+<td style="text-align: center;">5.4 %</td>
+<td style="text-align: center;">1.8 %</td>
+</tr>
+<tr class="even">
+<td>Lags</td>
+<td style="text-align: center;">5.3 %</td>
+<td style="text-align: center;">4.0 %</td>
+</tr>
+<tr class="odd">
+<td>Wetter (direkt)</td>
+<td style="text-align: center;">1.8 %</td>
+<td style="text-align: center;">1.4 %</td>
+</tr>
+</tbody>
+</table>
+<p>Top-5 Features v21a: <code>tmp_roll365_max</code> (11.5%), <code>prec_roll365_mean</code> (10.4%), <code>prec_roll270_mean</code> (9.8%), <code>prec_roll90_mean</code> (8.4%), <code>prec_roll60_mean</code> (6.3%). <code>prec_roll180_mean</code> fällt von Rang 1 (16.2%) auf <strong>Rang 7 (4.7%)</strong> — vollständig verdrängt durch noch längere Fenster.</p>
+<p>LGB Iterationen: 991/999/<strong>1000</strong>/530/951 — Woche 3 trifft das Limit (N_ESTIMATORS=1000) → <strong>Modell war unterfit, brauchte mehr Bäume!</strong></p>
+</section>
+<section id="v22_recent8-feature-shift-durch-recent-filter" class="level3">
+<h3 class="anchored" data-anchor-id="v22_recent8-feature-shift-durch-recent-filter">v22_recent8 — Feature-Shift durch Recent-Filter</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Gruppe</th>
+<th style="text-align: center;">v19 (15 Jahre)</th>
+<th style="text-align: center;"><strong>v22 (8 Jahre)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Rolling Stats</td>
+<td style="text-align: center;">79.5 %</td>
+<td style="text-align: center;">79.5 %</td>
+</tr>
+<tr class="even">
+<td>Dürre-Indices</td>
+<td style="text-align: center;">7.1 %</td>
+<td style="text-align: center;">5.7 %</td>
+</tr>
+<tr class="odd">
+<td>regional_mean</td>
+<td style="text-align: center;">5.4 %</td>
+<td style="text-align: center;"><strong>6.9 %</strong></td>
+</tr>
+<tr class="even">
+<td>Lags</td>
+<td style="text-align: center;">5.3 %</td>
+<td style="text-align: center;">4.9 %</td>
+</tr>
+<tr class="odd">
+<td>Wetter (direkt)</td>
+<td style="text-align: center;">1.8 %</td>
+<td style="text-align: center;">1.7 %</td>
+</tr>
+</tbody>
+</table>
+<p>Top-Features Verschiebung: <code>prec_roll90_mean</code> wird #1 (war #2), <code>prec_roll180_mean</code> fällt auf #2. Das 90-Tage-Fenster gewinnt an Gewicht wenn weniger Langzeitdaten vorhanden sind. <code>regional_mean_score</code> steigt von 5.4% auf 6.9% — das Modell kompensiert fehlende History durch die statische Regions-Charakteristik.</p>
+</section>
+<section id="ältere-runs-mit-score_lag" class="level3">
+<h3 class="anchored" data-anchor-id="ältere-runs-mit-score_lag">Ältere Runs — mit score_lag</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th style="text-align: center;">v15 (gap=0)</th>
+<th style="text-align: center;">v17 (gap=0)</th>
+<th style="text-align: center;">v16_chain</th>
+<th style="text-align: center;"><strong>v18 (gap=13)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>score_lag1</td>
+<td style="text-align: center;">78.88 %</td>
+<td style="text-align: center;">76.78 %</td>
+<td style="text-align: center;">91.19 %</td>
+<td style="text-align: center;"><strong>41–46 %</strong></td>
+</tr>
+<tr class="even">
+<td>score_lag2</td>
+<td style="text-align: center;">12.39 %</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">7.16 %</td>
+<td style="text-align: center;">4–7 %</td>
+</tr>
+<tr class="odd">
+<td>score_lag3</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">0.73 %</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">1.3 %</td>
+</tr>
+<tr class="even">
+<td>score_mean_4w</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">9.34 %</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr class="odd">
+<td><strong>Alle score-Features</strong></td>
+<td style="text-align: center;">~93 %</td>
+<td style="text-align: center;">93.3 %</td>
+<td style="text-align: center;">~99 %</td>
+<td style="text-align: center;"><strong>~50 %</strong></td>
+</tr>
+<tr class="even">
+<td><strong>Wetter-Features gesamt</strong></td>
+<td style="text-align: center;">~7 %</td>
+<td style="text-align: center;">~6.7 %</td>
+<td style="text-align: center;">~1 %</td>
+<td style="text-align: center;"><strong>~49 %</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p><strong>Mit gap=13 verschiebt sich die Feature Importance drastisch</strong>: score_lag fällt von 93% auf 50%, Wetter steigt von 7% auf 49%. Das ist die richtige Richtung — aber selbst 50/50 reicht nicht, weil der stale score_lag im Test noch immer schadet. v19 (0% score_lag, 100% Wetter, besseres Val-Schema) ist nun das beste Modell mit Kaggle <strong>0.1930</strong>.</p>
+</blockquote>
+<hr>
+</section>
+</section>
+</section>
+<section id="analyse-warum-score_lag-schadet" class="level1">
+<h1>Analyse: Warum score_lag schadet</h1>
+<section id="das-staleness-problem" class="level2">
+<h2 class="anchored" data-anchor-id="das-staleness-problem">Das Staleness-Problem</h2>
+<pre><code>Training (Sliding Windows):
+  X[t] enthält score_lag1 = Score von Woche t  →  sehr frisch (0 Tage alt)
+  y[t] = Scores der nächsten 5 Wochen
+  Autokorrelation lag1 = 0.97 → fast perfekte Vorhersage
+
+Test (Kaggle):
+  X_test = Features vom letzten Test-Tag (Tag 91 des Test-Fensters)
+  score_lag1 = letzter TRAININGS-Score (vor 91 Tagen!)
+  Autokorrelation nach 13 Wochen ≈ 0.60–0.70
+
+Ergebnis: Modell gibt 90% Gewicht auf veraltete Info → schlechte Predictions</code></pre>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Szenario</th>
+<th style="text-align: center;">score_lag1 Alter</th>
+<th style="text-align: center;">Autokorr.</th>
+<th style="text-align: center;">Modell-Performance</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Validierung (lokal)</td>
+<td style="text-align: center;">1 Woche</td>
+<td style="text-align: center;">~0.97</td>
+<td style="text-align: center;">MAE ≈ 0.03–0.10</td>
+</tr>
+<tr class="even">
+<td>Kaggle Test</td>
+<td style="text-align: center;">~13 Wochen</td>
+<td style="text-align: center;">~0.60</td>
+<td style="text-align: center;">MAE ≈ 1.04–1.08</td>
+</tr>
+<tr class="odd">
+<td>v12 (kein score_lag)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">MAE ≈ 0.82</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="v18-gap-simulation-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v18-gap-simulation-ergebnisse-interpretation">v18: Gap-Simulation — Ergebnisse &amp; Interpretation</h2>
+<p>v18 simuliert die 91-Tage-Lücke direkt: <code>score_lag1 = sc[t - 13]</code> in Training <strong>und</strong> Validation.</p>
+<pre><code>v18 Ergebnisse:
+  Val MAE (gap=13, realistisch):  0.1831
+  Val MAE (gap=0,  optimistisch): 0.1275
+  Kaggle MAE:                     0.9134
+
+  Persistence-Baseline in Val:    0.0321  ← kritischer Hinweis!
+  score_lag1 (gap=13) wiederholt: 0.6535</code></pre>
+<p><strong>Was gut funktioniert hat:</strong> Feature Importance verschob sich von 93% score_lag → 50% score_lag / 49% Wetter. Das Modell nutzt bei stale Scores automatisch mehr Wetter-Signale.</p>
+<p><strong>Warum val MAE (0.18) trotzdem ≠ Kaggle MAE (0.91):</strong></p>
+<p>Die Persistence-Baseline von 0.0321 enthüllt das eigentliche Problem. In den letzten 5 Val-Wochen sind die Dürre-Scores kaum verändert — die Val-Regionen befinden sich am Ende einer stabilen Periode. Der einfachste mögliche Predictor (letzten Score wiederholen) macht MAE 0.03.</p>
+<p>Im Kaggle-Test hingegen: echte Unsicherheit über 91 unbekannte Tage. Dürre-Bedingungen können sich in dieser Zeit dramatisch ändern. Das Val-Schema testet die <strong>falsche Frage</strong>.</p>
+<pre><code>Val fragt:  "Wie stabil ist Dürre in den nächsten 5 Wochen einer bekannten Region?"
+Test fragt: "Was passiert in 5 Wochen nach 91 unbekannten Tagen?"</code></pre>
+<p><strong>Fazit v18:</strong> Gap-Simulation adressiert das score_lag-Staleness-Problem, aber nicht das grundlegende Val-Schema-Problem. Selbst mit gap=13 sind Val-Regionen zu “leicht” weil sie am Ende stabiler Phasen liegen.</p>
+<p><strong>Kaggle v18 = 0.9134 &gt; v12 = 0.8258:</strong> Selbst gap-trainierter score_lag (50% Gewicht) schadet noch immer im Vergleich zu keinem score_lag. <strong>v19 (0.8193) und v22 (0.8132) sind die besten Modelle.</strong></p>
+<hr>
+</section>
+<section id="v22_recent8-recent-filter-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v22_recent8-recent-filter-ergebnisse-interpretation">v22_recent8: Recent-Filter — Ergebnisse &amp; Interpretation</h2>
+<p>v22 trainiert auf den letzten 8 von ~15 Jahren pro Region. Gleiche Features und Val-Schema wie v19.</p>
+<pre><code>v22_recent8 Ergebnisse:
+  Val MAE:          0.2342  ← BESSER als v19 (0.2522)
+  Kaggle MAE:       0.8132  ← BESSER als v19 (0.8193)  ✓
+  Training-Windows: 926.176 (v19: 1.744.448, −47%)
+  LGB Iterationen:  813/633/608/879/836 (v19: 477/700/388/363/358)
+  Blend:            lgb=0.90  (v19: lgb=0.50, cat=0.45)</code></pre>
+<p><strong>Beide Metriken verbessern sich:</strong> Val MAE 0.2342 &lt; 0.2522 und Kaggle MAE 0.8132 &lt; 0.8193 → kein Overfitting-Muster.</p>
+<p><strong>Was erklärt die Verbesserung?</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Effekt</th>
+<th>Erklärung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Fokus auf relevante Daten</td>
+<td>Neuere 8 Jahre haben ähnlichere Muster zum Test-Set</td>
+</tr>
+<tr class="even">
+<td>Mehr Iterationen = bessere Anpassung</td>
+<td>LGB kann mit mehr Bäumen tiefere Muster lernen</td>
+</tr>
+<tr class="odd">
+<td>Rolling-Features bleiben vollständig</td>
+<td>Filter auf Windows, nicht auf Feature-Engineering — lange Rollen bleiben intakt</td>
+</tr>
+<tr class="even">
+<td>Val und Kaggle in Einklang</td>
+<td>Val MAE und Kaggle MAE verbessern sich gemeinsam → das Val-Schema funktioniert</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Was sagen uns die LGB-Iterationen?</strong> v22 braucht mehr Bäume (avg ~750 vs 477). Mit weniger Trainings-Windows ist jeder Baum wertvoller — früheres Stoppen war suboptimal bei v19.</p>
+<p><strong>Schlussfolgerung:</strong> Der Recent-Filter (letzte 8 Jahre) hilft. Die Frage ist: was ist das optimale Fenster?</p>
+<blockquote class="blockquote">
+<p><strong>Merksatz:</strong> Wenn Val und Kaggle gemeinsam besser werden → das Daten-Window passt besser zum Test-Set. Der Recent-Filter reduziert Verteilungs-Drift zwischen älteren und neueren Perioden.</p>
+</blockquote>
+<hr>
+</section>
+<section id="recent_years-sweep-vollständige-ergebnisse" class="level2">
+<h2 class="anchored" data-anchor-id="recent_years-sweep-vollständige-ergebnisse">RECENT_YEARS Sweep — Vollständige Ergebnisse</h2>
+<p>Drei Experimente mit unterschiedlichen RECENT_YEARS-Werten zeigen einen klaren Trend:</p>
+<pre><code>RECENT_YEARS=5  (33% der Daten):
+  Kaggle v22  (last-window val, 2248 pts): 0.8132  (NB3)
+  local 5y    (20%-holdout val,  449 pts): 0.8654  (CSV)
+
+RECENT_YEARS=8  (53% der Daten):
+  local 8y    (20%-holdout val,  449 pts): 0.8095  (CSV) ← BEST
+
+RECENT_YEARS=15 (100% der Daten):
+  v19         (last-window val, 2248 pts): 0.8193
+  v12         (20%-holdout val,  449 pts): 0.8258</code></pre>
+<p><strong>Der RECENT_YEARS-Effekt:</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">RECENT_YEARS</th>
+<th style="text-align: center;">Datenanteil</th>
+<th style="text-align: center;">Kaggle (best. Val-Schema)</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">33%</td>
+<td style="text-align: center;">0.8132</td>
+<td>zu wenig Daten → unterfit</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>8</strong></td>
+<td style="text-align: center;"><strong>53%</strong></td>
+<td style="text-align: center;"><strong>0.8095</strong></td>
+<td><strong>Sweet Spot!</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">100%</td>
+<td style="text-align: center;">0.8193</td>
+<td>alte Muster bremsen Generalisierung</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Was erklärt den Sweet Spot bei 8 Jahren?</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Effekt</th>
+<th>Erklärung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Zu wenig Jahre (5y)</td>
+<td>LGB trifft Iterations-Limit (alle 1000!) → unterfit, schlechte Generalisierung</td>
+</tr>
+<tr class="even">
+<td>Zu viele Jahre (15y)</td>
+<td>Klimatische Muster aus 2000–2007 passen nicht mehr zu aktuellen Dürren</td>
+</tr>
+<tr class="odd">
+<td>8 Jahre = optimaler Mittelweg</td>
+<td>Genug Daten für stabiles Training, nah genug an aktuellen Klimamustern</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Val-Schema-Effekt bei gleichem RECENT_YEARS=5:</strong></p>
+<pre><code>Kaggle v22 (last-window, 2248 val pts): 0.8132
+local 5y   (holdout,      449 val pts): 0.8654
+Δ = 0.052  ← großer Unterschied durch besseres Val-Schema!</code></pre>
+<p>Größeres Val-Set (2248 pts) → Early Stopping kalibriert besser → Modell konvergiert sauberer. Mit holdout (449 pts) trifft LGB das Iterations-Limit → unkontrolliertes Training → schlechtere Generalisierung.</p>
+<p><strong>LGB Iterations-Diagnose:</strong></p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th>LGB Iters (wk1-5)</th>
+<th>Problem</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>local 5y, holdout</td>
+<td>1000/1000/998/990/997</td>
+<td>Alle am Limit → unterfit</td>
+</tr>
+<tr class="even">
+<td>Kaggle v22, 5y, last-win</td>
+<td>813/633/608/879/836</td>
+<td>Gut kalibriert ✓</td>
+</tr>
+<tr class="odd">
+<td>local 8y, holdout</td>
+<td>215/999/1000/982/998</td>
+<td>Woche 2-5 am Limit</td>
+</tr>
+<tr class="even">
+<td>Kaggle v22, 15y (v19)</td>
+<td>477/700/388/363/358</td>
+<td>Gut kalibriert ✓</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Kritischer nächster Schritt:</strong> <code>recent_local</code> (8y + holdout) = 0.8095, aber Kaggle v22 (5y + last-window) = 0.8132. Wenn wir <strong>8 Jahre + last-window-val</strong> kombinieren → erwartete Verbesserung auf ~0.79–0.80. Die Kombination aus bestem RECENT_YEARS (8y) und bestem Val-Schema (last-window) wurde noch nicht getestet!</p>
+<hr>
+</section>
+<section id="v24-8-jahre-seasonal-mean-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v24-8-jahre-seasonal-mean-ergebnisse-interpretation">v24: 8 Jahre + Seasonal Mean — Ergebnisse &amp; Interpretation</h2>
+<p>v24 kombiniert RECENT_YEARS=8 mit einem neuen Feature: <code>regional_seasonal_mean</code> (Durchschnittsscore pro Region × Monat, 12 Werte/Region). Sonst identisch mit v19/v22.</p>
+<pre><code>v24 Ergebnisse:
+  RECENT_YEARS:    8  (53% der Daten)
+  Features:        134  (+regional_seasonal_mean)
+  Val MAE:         0.2314  ← besser als v22/5y (0.2342)
+  Kaggle MAE:      0.8106  ← 2. bestes Ergebnis insgesamt
+  LGB iters:       784/987/547/1000/943  ← Woche 4 trifft Limit
+  Blend:           lgb=0.90 xgb=0.05 cat=0.05
+  Runtime:         88.4m</code></pre>
+<p><strong>Was bringt <code>regional_seasonal_mean</code>?</strong></p>
+<p>Das Feature erreicht Rang 7 (2.88% Gain-Importance) — hinter den dominanten Rolling-Features aber deutlich vor vielen Lags. Es encodiert saisonale Dürremuster pro Region: Gebiete mit ausgeprägten Trockenzeiten werden besser erkannt als durch den jährlichen Gesamtmittelwert allein.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th style="text-align: center;">v19 (15y)</th>
+<th style="text-align: center;">v22 (5y)</th>
+<th style="text-align: center;"><strong>v24 (8y + seasonal)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>regional_mean_score</td>
+<td style="text-align: center;">5.4%</td>
+<td style="text-align: center;">6.9%</td>
+<td style="text-align: center;">5.3%</td>
+</tr>
+<tr class="even">
+<td>regional_seasonal_mean</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"><strong>2.9% (NEU)</strong></td>
+</tr>
+<tr class="odd">
+<td>prec_roll90_mean</td>
+<td style="text-align: center;">14.0%</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"><strong>16.1% (Rang 1)</strong></td>
+</tr>
+<tr class="even">
+<td>prec_roll180_mean</td>
+<td style="text-align: center;">16.2%</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">14.4%</td>
+</tr>
+</tbody>
+</table>
+<p>Mit RECENT_YEARS=8 rückt <code>prec_roll90_mean</code> auf Platz 1 (war Platz 2 bei 15y). Das kürzere Zeitfenster gewichtet aktuelle Niederschlagsmuster stärker.</p>
+<p><strong>Vergleich mit Sweep-Referenz:</strong></p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Modell</th>
+<th style="text-align: center;">RY</th>
+<th style="text-align: center;">+ seasonal</th>
+<th style="text-align: center;">Kaggle</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>v22 5y, last-win</td>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">0.8132</td>
+</tr>
+<tr class="even">
+<td><strong>v24 8y, last-win</strong></td>
+<td style="text-align: center;"><strong>8</strong></td>
+<td style="text-align: center;"><strong>✓</strong></td>
+<td style="text-align: center;"><strong>0.8106</strong></td>
+</tr>
+<tr class="odd">
+<td>recent_local 8y, holdout</td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">✗</td>
+<td style="text-align: center;">0.8095</td>
+</tr>
+</tbody>
+</table>
+<p>v24 liegt zwischen recent_local (holdout) und v22 (5y, last-window) — der Seasonal-Mean-Effekt ist real, aber klein (~0.003). Das Hauptpotenzial liegt weiterhin bei RECENT_YEARS=8 selbst.</p>
+<p><strong>LGB Limit bei Woche 4:</strong> Iteration 1000 trifft das Limit — Woche 4 war unterfit. Ein erneuter Lauf mit N=1500 oder LR=0.03 könnte minimal verbessern.</p>
+<hr>
+</section>
+<section id="v26-recent_years7-überraschender-ausreißer" class="level2">
+<h2 class="anchored" data-anchor-id="v26-recent_years7-überraschender-ausreißer">v26: RECENT_YEARS=7 — Überraschender Ausreißer</h2>
+<p>v26 schließt die Lücke im RECENT_YEARS-Sweep zwischen 5y (0.8132) und 8y (laufend). Identische Konfiguration wie v19/v22 (last-window val, 133 Features), nur RECENT_YEARS=7.</p>
+<pre><code>v26 Ergebnisse:
+  RECENT_YEARS:    7  (47% der Daten, 809k Train-Fenster)
+  Val MAE:         0.2273  ← BESTES Val MAE bisher (!)
+  Kaggle MAE:      0.8270  ← SCHLECHTER als Baseline v12 (0.8258)
+  LGB iters:       802/1000/706/998/865  ← Wochen 2 und 4 treffen Limit
+  regional_mean_score: 8.0%  (v24: 5.3%, v19: 5.4%)
+  Blend:           lgb=0.90 xgb=0.05 cat=0.05</code></pre>
+<p><strong>Val-MAE 0.2273 = bestes Val, Kaggle 0.8270 = schlechter als Baseline. Paradox.</strong></p>
+<p>RECENT_YEARS-Sweep gesamt (last-window val):</p>
+<pre><code>5y   (v22):   Train ~570k  Val MAE 0.2342  Kaggle 0.8132  ✓
+7y   (v26):   Train  809k  Val MAE 0.2273  Kaggle 0.8270  ✗ Loch!
+15y  (v19):   Train 1,744k Val MAE 0.2522  Kaggle 0.8193  ✓</code></pre>
+<p>7y ist der schlechteste der drei last-window Punkte — obwohl die Val-MAE optimal ist.</p>
+<p><strong>Mögliche Erklärungen:</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Ursache</th>
+<th>Erklärung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>LGB unterfit (2 Wochen Limit)</td>
+<td>Wochen 2 und 4 nie konvergiert → schlechte Predictions für diese Wochen</td>
+</tr>
+<tr class="even">
+<td>7y trifft klimatische Ausreißerperiode</td>
+<td>Das 7-Jahres-Fenster enthält zufällig eine besonders variable Periode</td>
+</tr>
+<tr class="odd">
+<td>Val MAE-Verbesserung durch Overfitting</td>
+<td>Modell lernt Val-Muster auswendig, überträgt sich nicht auf Test</td>
+</tr>
+<tr class="even">
+<td><code>regional_mean_score</code> springt auf 8%</td>
+<td>Modell stützt sich stark auf statischen Mittelwert statt Zeitreihen → weniger robust</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Kern-Diagnose:</strong> Die zwei LGB-Limit-Treffer bei Wochen 2 und 4 sind der wahrscheinlichste Schuldige. Das Modell konvergiert für diese Wochen nicht → Predictions für Woche 2 und 4 sind systematisch schlechter, was den Kaggle-MAE über alle 5 Wochen stark anhebt.</p>
+<p><strong>Schlussfolgerung:</strong> 7y mit N=1000 ist unterfit. Entweder N=2000 testen (wie v21b-Ansatz) oder 7y überspringen und stattdessen 8y bestätigen. Der RECENT_YEARS-Sweet-Spot ist <strong>8y, nicht 7y</strong>.</p>
+<hr>
+</section>
+<section id="v21a-längere-rolling-fenster-270d-365d-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v21a-längere-rolling-fenster-270d-365d-ergebnisse-interpretation">v21a: Längere Rolling-Fenster (270d + 365d) — Ergebnisse &amp; Interpretation</h2>
+<p>v21a fügt 270-Tage- und 365-Tage-Rolling-Fenster hinzu. Gleiche Val-Schema und Features wie v19 (außer ROLL_WINS).</p>
+<pre><code>v21a Ergebnisse:
+  Val MAE:          0.2272  ← BESSER als v19 (0.2522) und v22 (0.2342)
+  Kaggle MAE:       0.8671  ← SCHLECHTER als v12 (0.8258), v19 (0.8193), v22 (0.8132)
+  Features:         157  (v19: 133, +24 neue Rolling-Features)
+  LGB Iterationen:  991/999/1000/530/951  ← Woche 3 trifft Limit!
+  Blend:            lgb=0.90, xgb=0.05, cat=0.05
+  Runtime:          178.4m</code></pre>
+<p><strong>Gleiche Warnung wie v22: Val verbessert sich, Kaggle verschlechtert sich.</strong></p>
+<p><strong>Warum scheitert v21a trotz besserer Val-MAE?</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Effekt</th>
+<th>Erklärung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>91-Tage-Grenze im Test-Set</td>
+<td>Test hat nur 91 Tage pro Region — roll270/365 werden wie roll91 berechnet</td>
+</tr>
+<tr class="even">
+<td>Train/Test-Distributions-Shift</td>
+<td>Im Training: roll365 = echter Jahres-Mittelwert. Im Test: roll365 = 91-Tage-Mittelwert</td>
+</tr>
+<tr class="odd">
+<td>Val sieht volle History</td>
+<td>Val-Punkte kommen aus Trainingsdaten (15 Jahre vorhanden) → roll365 ist korrekt</td>
+</tr>
+<tr class="even">
+<td>Val und Test messen verschiedene Dinge</td>
+<td>Val-Feature ≠ Test-Feature für roll270/365</td>
+</tr>
+<tr class="odd">
+<td>Blend-Kollaps</td>
+<td>LGB=0.90 wieder — Val-leicht-Features lassen LGB dominieren</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Die 91-Tage-Grenze ist der entscheidende Befund:</strong></p>
+<pre><code>Trainings-Daten:   roll365_mean = Durchschnitt der letzten 365 Tage  ✓ sinnvoll
+Test-Daten (91d):  roll365_mean = Durchschnitt der letzten 91 Tage   ✗ irreführend!
+
+Das Modell lernt: "roll365_mean ist das wichtigste Feature (10.4%)"
+Aber im Test gibt es kein echtes 365-Tage-Fenster → Feature ist ein anderes Konzept
+→ Das gelernte Muster überträgt sich nicht</code></pre>
+<p><strong>LGB Iterationen als Signal:</strong> Woche 3 trifft genau N_ESTIMATORS=1000 (nie konvergiert). Das bedeutet: <strong>v19 und v21a waren unterfit</strong> — 1000 Bäume reichen nicht, mehr wären besser.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Woche</th>
+<th style="text-align: center;">v21a Iters</th>
+<th style="text-align: center;">v19 Iters</th>
+<th style="text-align: center;">Δ</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td style="text-align: center;">991</td>
+<td style="text-align: center;">477</td>
+<td style="text-align: center;">+514</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td style="text-align: center;">999</td>
+<td style="text-align: center;">700</td>
+<td style="text-align: center;">+299</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td style="text-align: center;"><strong>1000</strong> (Limit!)</td>
+<td style="text-align: center;">388</td>
+<td style="text-align: center;">+612</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td style="text-align: center;">530</td>
+<td style="text-align: center;">363</td>
+<td style="text-align: center;">+167</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td style="text-align: center;">951</td>
+<td style="text-align: center;">358</td>
+<td style="text-align: center;">+593</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Schlussfolgerung:</strong> Längere Rolling-Fenster (&gt;180d) sind kontraindiziert wenn das Test-Set ≤91 Tage hat. Die optimale maximale Fenstergröße ist durch die Test-Datenlänge begrenzt (~90 Tage = max sinnvoll). Die v19-Roll-Fenster (max 180d) sind bereits “zu lang” für den Test — aber 180d funktioniert noch weil das Modell mit min_periods=18 zumindest einen Teil des echten Signals bekommt.</p>
+<p><strong>Nächster Schritt:</strong> v21b — mehr Bäume (N=2000, LR=0.02) bei gleichen Features wie v19. Damit könnte das Konvergenzproblem (Woche 3 trifft Limit) behoben werden.</p>
+<blockquote class="blockquote">
+<p><strong>Merksatz:</strong> Rolling-Fenster müssen zur Test-Datenlänge passen. Features die im Test nicht korrekt berechnet werden können, schaden der Generalisierung — egal wie gut sie im Val sind.</p>
+</blockquote>
+<hr>
+</section>
+<section id="v21b-mehr-bäume-lr0.02-n2000-1.1-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v21b-mehr-bäume-lr0.02-n2000-1.1-ergebnisse-interpretation">v21b: Mehr Bäume (LR=0.02, N=2000, ×1.1) — Ergebnisse &amp; Interpretation</h2>
+<p>v21b adressiert das Konvergenzproblem aus v21a: LR 0.04→0.02 und N_ESTIMATORS 1000→2000 damit LGB nicht mehr am Limit stoppt. Gleiche Features und Val-Schema wie v19.</p>
+<pre><code>v21b Ergebnisse:
+  Val MAE:          0.2528  ← leicht schlechter als v19 (0.2522)
+  Kaggle MAE:       0.8192  ← praktisch identisch mit v19 (0.8193)
+  Runtime:          251m    ← 2× länger als v19 (130m)
+  LGB Iterationen:  396/1168/1077/1022/1394  (avg ≈ 1011)
+  Blend:            lgb=0.50 xgb=0.05 cat=0.45  (identisch mit v19)
+  Final trees (×1.1): [435, 1284, 1184, 1124, 1533]</code></pre>
+<p><strong>Das Modell brauchte tatsächlich mehr Bäume — aber es half nicht.</strong></p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Woche</th>
+<th style="text-align: center;">v19 Iters (LR=0.04)</th>
+<th style="text-align: center;">v21b Iters (LR=0.02)</th>
+<th style="text-align: center;">Faktor</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td style="text-align: center;">477</td>
+<td style="text-align: center;">396</td>
+<td style="text-align: center;">0.8×</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td style="text-align: center;">700</td>
+<td style="text-align: center;"><strong>1168</strong></td>
+<td style="text-align: center;">1.7×</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td style="text-align: center;">388</td>
+<td style="text-align: center;"><strong>1077</strong></td>
+<td style="text-align: center;">2.8×</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td style="text-align: center;">363</td>
+<td style="text-align: center;"><strong>1022</strong></td>
+<td style="text-align: center;">2.8×</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td style="text-align: center;">358</td>
+<td style="text-align: center;"><strong>1394</strong></td>
+<td style="text-align: center;">3.9×</td>
+</tr>
+</tbody>
+</table>
+<p>Wochen 2–5 brauchten deutlich mehr Bäume mit LR=0.02 — sie haben jetzt sauber konvergiert statt am Limit zu stoppen. Trotzdem: Kaggle-Score bleibt 0.8192 ≈ 0.8193.</p>
+<p><strong>Warum hilft mehr Konvergenz nicht?</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Hypothese</th>
+<th>Bewertung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>v19 war nicht unterfit, sondern hatte echte Kapazitätsgrenze</td>
+<td>✓ Wahrscheinlich — mehr Bäume = mehr Overfitting ohne neues Signal</td>
+</tr>
+<tr class="even">
+<td>Der Bottleneck liegt bei den Features, nicht bei der Modellkapazität</td>
+<td>✓ Feature-Set (133 Features) bleibt identisch</td>
+</tr>
+<tr class="odd">
+<td>Val-Schema (last-window, 2248 pts) limitiert die Optimierung stärker als N_ESTIMATORS</td>
+<td>✓ Blend-Gewichte bleiben gleich → identische Modell-Struktur</td>
+</tr>
+<tr class="even">
+<td>×1.1 Final-Scaling war zu konservativ</td>
+<td>Möglich, aber kleine Änderung</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Schlussfolgerung:</strong> Der Engpass liegt nicht bei der Baumanzahl, sondern bei Features oder RECENT_YEARS. v21b bestätigt v19 als solides Baseline. Verbesserungen kommen durch <strong>andere Datenauswahl</strong> (RECENT_YEARS=8) oder <strong>andere Features</strong> (seasonal mean, kürzere Rolls).</p>
+<hr>
+</section>
+<section id="v25-last-year-validation-52-fensterregion-ergebnisse-interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="v25-last-year-validation-52-fensterregion-ergebnisse-interpretation">v25: Last-Year Validation (52 Fenster/Region) — Ergebnisse &amp; Interpretation</h2>
+<p>v25 testet ein breiteres Val-Schema: statt 1 Fenster pro Region werden die letzten 52 Fenster (~1 Jahr) als Val genutzt. RECENT_YEARS=9, sonst identisch mit v22.</p>
+<pre><code>v25 Ergebnisse:
+  RECENT_YEARS:     9  (~60% der Daten)
+  Val-Schema:       letzte 52 Fenster pro Region  (~116.896 Punkte)
+  Train-Fenster:    erste ~8 Jahre pro Region
+  Kaggle MAE:       0.8163  ←  schlechter als best (0.8095), besser als v19 (0.8193)
+  Val MAE:          nicht direkt vergleichbar mit v22 (anderes Schema)</code></pre>
+<p><strong>Vergleich — gleiche effektive Trainingsdatenmenge:</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th style="text-align: center;">Training auf</th>
+<th>Val-Schema</th>
+<th style="text-align: center;">Val-Punkte</th>
+<th style="text-align: center;">Kaggle</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>recent_local 8y (beste)</td>
+<td style="text-align: center;">8 Jahre</td>
+<td>20%-Holdout (449 Regionen)</td>
+<td style="text-align: center;">449</td>
+<td style="text-align: center;"><strong>0.8095</strong></td>
+</tr>
+<tr class="even">
+<td>v25 (9y last-year)</td>
+<td style="text-align: center;">~8 Jahre (9y − 1y val)</td>
+<td>52 Fenster/Region</td>
+<td style="text-align: center;">~116.896</td>
+<td style="text-align: center;">0.8163</td>
+</tr>
+</tbody>
+</table>
+<p>Effektiv trainieren beide Modelle auf denselben ~8 Jahren Daten — der Unterschied liegt nur im Val-Schema. Das Holdout (449 Punkte über 449 Regionen) liefert bessere Early-Stopping-Kalibrierung als 52 Fenster pro Region.</p>
+<p><strong>Warum hilft mehr Val nicht?</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Hypothese</th>
+<th>Erklärung</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Holdout = Regions-Generalisierung</td>
+<td>449 Regionen testen ob Modell auf neue Regionen überträgt → näher am Kaggle-Test</td>
+</tr>
+<tr class="even">
+<td>52 Fenster/Region = Zeit-Generalisierung</td>
+<td>Testet ob Modell in der Zeit extrapoliert → andere Frage als Kaggle stellt</td>
+</tr>
+<tr class="odd">
+<td>116k Val-Punkte → Early Stopping zu sensitiv</td>
+<td>Modell stoppt zu früh weil Val-Signal over-averaged ist</td>
+</tr>
+<tr class="even">
+<td>Training verliert 1 komplettes Jahr</td>
+<td>Bei 9y − 1y = 8y Trainingsdaten kein Vorteil über direkte 8y</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Schlussfolgerung:</strong> Das Last-Year Val-Schema ist trotz 52× mehr Validierungspunkten nicht besser als Holdout oder Last-Window. Der Kaggle-Test prüft Regions-Generalisierung stärker als Zeitgeneralisierung. <strong>Holdout-Val bleibt das robusteste Schema für Early Stopping.</strong></p>
+<hr>
+</section>
+</section>
+<section id="validierungsschema-analyse-alternativen" class="level1">
+<h1>Validierungsschema – Analyse &amp; Alternativen</h1>
+<section id="aktuelles-schema" class="level2">
+<h2 class="anchored" data-anchor-id="aktuelles-schema">Aktuelles Schema</h2>
+<pre><code>Region-Holdout (20%):
+  Train: 80% der Regionen, alle Windows (stride=1)
+  Val:   20% der Regionen, NUR letztes Window pro Region
+         → 449 Datenpunkte (2248 × 20%)
+         → score_lag1 = Score von vor 1 Woche (immer frisch!)</code></pre>
+<p><strong>Problem:</strong> Das Val-Schema testet die falsche Schwierigkeitsstufe. Im Training/Val ist score_lag immer frisch (Autokorr. 0.97). Im Kaggle-Test ist score_lag 13 Wochen alt (Autokorr. 0.60–0.70). Das führt zur riesigen Diskrepanz: Val-MAE 0.03 vs.&nbsp;Kaggle-MAE 0.82.</p>
+</section>
+<section id="unbekannte-teststruktur" class="level2">
+<h2 class="anchored" data-anchor-id="unbekannte-teststruktur">Unbekannte Teststruktur</h2>
+<p>Wir wissen nicht genau, wie der Kaggle-Test aufgebaut ist:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Hypothese</th>
+<th>Beschreibung</th>
+<th>Konsequenz für score_lag</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>A</strong> <em>(wahrscheinlich)</em></td>
+<td>Gleiche Regionen, Prediction nach 91-Tage-Fenster</td>
+<td>score_lag = 13+ Wochen alt → veraltet</td>
+</tr>
+<tr class="even">
+<td><strong>B</strong></td>
+<td>Gleiche Regionen, Prediction innerhalb des 91-Tage-Fensters</td>
+<td>score_lag = 1-13 Wochen alt → teils nützlich</td>
+</tr>
+<tr class="odd">
+<td><strong>C</strong></td>
+<td>Völlig neue Regionen (nicht im Training)</td>
+<td>score_lag aus Training komplett nutzlos</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p>v12’s Überlegenheit deutet auf <strong>Hypothese A oder C</strong> hin: Wetter-Features sind robuster als score_lag.</p>
+</blockquote>
+</section>
+<section id="alternative-validierungsstrategien" class="level2">
+<h2 class="anchored" data-anchor-id="alternative-validierungsstrategien">Alternative Validierungsstrategien</h2>
+<section id="option-1-time-based-split-empfohlen-als-vergleich" class="level3">
+<h3 class="anchored" data-anchor-id="option-1-time-based-split-empfohlen-als-vergleich">Option 1: Time-based Split (empfohlen als Vergleich)</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Statt Region-Holdout: für ALLE Regionen letzte N Wochen als Val</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> region, g <span class="kw">in</span> weekly.groupby(<span class="st">"region_id"</span>):</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    train_part <span class="op">=</span> g.iloc[:<span class="op">-</span>N]   <span class="co"># alles bis auf letzte N Wochen</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    val_part   <span class="op">=</span> g.iloc[<span class="op">-</span>N:]   <span class="co"># letzte N Wochen</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><strong>Vorteile:</strong> - Jede Region hat einen Val-Punkt → ~2248 Datenpunkte statt 449 - Testet Zeitgeneralisierung innerhalb bekannter Regionen</p>
+<p><strong>Nachteile:</strong> - score_lag noch immer frisch (kein simulierter 91-Tage-Gap)</p>
+<hr>
+</section>
+<section id="option-2-gap-simulation-realistischstes-val-schema" class="level3">
+<h3 class="anchored" data-anchor-id="option-2-gap-simulation-realistischstes-val-schema">Option 2: Gap-Simulation (realistischstes Val-Schema)</h3>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Für jede Region: score_lag1 = Score von VOR 13 Wochen (simuliert 91-Tage-Gap)</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co"># X[t] = Features bei Woche t</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># score_lag1_test = sc[t - 13]  (statt sc[t])</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co"># y = Scores bei Woche t+1..t+5</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><strong>Vorteile:</strong> - Simuliert exakt das Testszenario (score_lag 13 Wochen alt) - Val-MAE würde realistisch ≈ Kaggle-MAE werden - Würde zeigen ob score_lag mit GAP noch nützlich ist</p>
+<p><strong>Nachteile:</strong> - Komplexere Implementierung - Reduziert Trainings-Datenpunkte pro Region</p>
+<hr>
+</section>
+<section id="option-3-gemischte-strategie" class="level3">
+<h3 class="anchored" data-anchor-id="option-3-gemischte-strategie">Option 3: Gemischte Strategie</h3>
+<pre><code>Train: alle Windows, score_lag immer frisch
+Val:   wie Testszenario, score_lag = 13 Wochen alt (Gap-Simulation)</code></pre>
+<p><strong>Resultat:</strong> Modell lernt mit frischem score_lag zu trainieren, wird aber an realem Testszenario evaluiert. Der Kaggle-Score würde in val besser vorhergesagt.</p>
+<hr>
+</section>
+</section>
+<section id="empfehlung-was-testen" class="level2">
+<h2 class="anchored" data-anchor-id="empfehlung-was-testen">Empfehlung: Was testen?</h2>
+<p><strong>Erkenntnisstand:</strong> score_lag schadet in allen Varianten. v12 (kein score_lag) ist bestes Modell. <strong>Strategie:</strong> Wetter-Features verbessern, nicht score_lag.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Test</th>
+<th style="text-align: center;">Priorität</th>
+<th>Erwarteter Erkenntnisgewinn</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>kaggle_v1_base (kein score_lag)</td>
+<td style="text-align: center;">⭐⭐⭐</td>
+<td>Reproduziert v12 mit mehr Features — kann es besser sein?</td>
+</tr>
+<tr class="even">
+<td>Time-based Val (lokal)</td>
+<td style="text-align: center;">⭐⭐⭐</td>
+<td>Testet ob Val-MAE realistischer wird (letzter N Wochen aller Regionen)</td>
+</tr>
+<tr class="odd">
+<td>RECENT_YEARS = 3 oder 5</td>
+<td style="text-align: center;">⭐⭐</td>
+<td>Fokus auf aktuellste Muster, weniger historischer Drift</td>
+</tr>
+<tr class="even">
+<td>kaggle_v2_seasonal</td>
+<td style="text-align: center;">⭐⭐</td>
+<td>Isoliert seasonal dev — hilft es ohne score_lag?</td>
+</tr>
+<tr class="odd">
+<td>XGBoost-only (kein LGB)</td>
+<td style="text-align: center;">⭐</td>
+<td>XGB hatte 95% Blend-Gewicht, LGB scheint schwächer</td>
+</tr>
+<tr class="even">
+<td>kaggle_v3_scorlag</td>
+<td style="text-align: center;">⭐</td>
+<td>Weniger sinnvoll — score_lag schadet laut v18 auch mit gap=13</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+</section>
+<section id="nächste-schritte" class="level1">
+<h1>Nächste Schritte</h1>
+<p><strong>Laufend:</strong> kaggle_v1_base auf Kaggle</p>
+<p><strong>Lokal parallel testen (ein Script):</strong></p>
+<p>Option A — Time-based Val: letzten 8–13 Wochen aller Regionen als Val verwenden. Wenn Val-MAE dann ≈ 0.82 → Schema-Problem bestätigt, können val als Optimierungsmetrik nutzen.</p>
+<p>Option B — RECENT_YEARS: v1_base mit <code>RECENT_YEARS=5</code> laufen lassen. Wenn Kaggle-Score besser → ältere Daten schaden (anderen Klimaperioden).</p>
+<p><strong>Nächste Submission-Runde (nach v1_base Ergebnis):</strong> - Ist v1 ≈ v12 → Basis ist korrekt, verbessern mit time-based val + feature-Tuning - Ist v1 &lt; v12 → v1 hat bessere Wetter-Features → darauf aufbauen - Ist v1 &gt; v12 → v12 Features waren spezifisch besser → v12 analysieren</p>
+<hr>
+</section>
+<section id="technische-details" class="level1">
+<h1>Technische Details</h1>
+<section id="datenstruktur-npz" class="level2">
+<h2 class="anchored" data-anchor-id="datenstruktur-npz">Datenstruktur NPZ</h2>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># train.npz</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Keys: region_id (int32), region_names (str), year, month, day (int32)</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="co">#       prec, surf_pre, humidity, tmp, dp_tmp, wb_tmp,</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="co">#       tmp_max, tmp_min, tmp_range, surf_tmp,</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="co">#       wind, wind_max, wind_min, wind_range (float32)</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="co">#       score (float32)</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="co"># test.npz: identisch, ohne 'score'</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Ordinal: year*372 + month*31 + day (proprietäres Kalender-System)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="cache-strategie" class="level2">
+<h2 class="anchored" data-anchor-id="cache-strategie">Cache-Strategie</h2>
+<pre><code>cache_weekly.npz      (~495 MB)   Feature Engineering, geteilt v1/v2/v3
+cache_windows_v1.npz  (~855 MB)   Sliding Windows für v1
+cache_windows_v2.npz              Sliding Windows für v2
+cache_windows_v3.npz              Sliding Windows für v3</code></pre>
+</section>
+<section id="modell-parameter-alle-scripts" class="level2">
+<h2 class="anchored" data-anchor-id="modell-parameter-alle-scripts">Modell-Parameter (alle Scripts)</h2>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>LGB_PARAMS <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    n_estimators<span class="op">=</span><span class="dv">1000</span>, learning_rate<span class="op">=</span><span class="fl">0.04</span>, num_leaves<span class="op">=</span><span class="dv">127</span>,</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    min_child_samples<span class="op">=</span><span class="dv">60</span>, subsample<span class="op">=</span><span class="fl">0.8</span>, colsample_bytree<span class="op">=</span><span class="fl">0.8</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    reg_alpha<span class="op">=</span><span class="fl">0.1</span>, reg_lambda<span class="op">=</span><span class="fl">0.1</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>XGB_PARAMS <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    n_estimators<span class="op">=</span><span class="dv">1000</span>, learning_rate<span class="op">=</span><span class="fl">0.04</span>, max_depth<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    min_child_weight<span class="op">=</span><span class="dv">50</span>, subsample<span class="op">=</span><span class="fl">0.8</span>, colsample_bytree<span class="op">=</span><span class="fl">0.8</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Blend-Gewichte: automatisch optimiert auf Val-MAE (Grid-Suche, 5%-Schritte)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    // For code content inside modals, clipBoardJS needs to be initialized with a container option
+    // TODO: Check when it could be a function (https://github.com/zenorocha/clipboard.js/issues/860)
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
