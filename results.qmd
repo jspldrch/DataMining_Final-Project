@@ -36,14 +36,14 @@ Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
 | v19 *(Last-window all regions)* | Last-window all | 15 | 0.2522 | 0.8193 ✓ | −0.0065 | |
 | **v12** *(Baseline)* | 20%-Holdout | 15 | ~0.04 | 0.8258 | — | |
 | v26 (7y, last-window) | Last-window all | 7 | 0.2273 | 0.8270 ✗ | +0.0012 | 7y = Loch! |
-| v21a (ROLL_WINS +270d+365d) | Last-window all | 15 | 0.2272 | 0.8671 ✗ | +0.041 | 91d-Grenze! |
 | recent20_local *(CSV, holdout)* | 20%-Holdout | 5 | 0.2323 | 0.8654 ✗ | +0.040 | 5y zu wenig |
+| v23 (ROLL_WINS ≤90d, LR=0.02, N=2000) | Last-window all | 15 | 0.3095 | 0.8657 ✗ | +0.040 | 180d fehlt! |
+| v21a (ROLL_WINS +270d+365d) | Last-window all | 15 | 0.2272 | 0.8671 ✗ | +0.041 | 91d-Grenze! |
 | v20 (Schema A, K=5 Val-Fenster) | Schema A | 15 | 0.2814 | 0.8728 ✗ | +0.047 | |
 | **v18** (gap=13 score_lag) | Last-window all | 15 | 0.1831 | 0.9134 ✗ | +0.088 | |
 | v16_chain (autoregressive) | — | 15 | 0.5213 | 0.9863 ✗ | +0.161 | |
 | v15 (score_lag1-5, seasonal dev) | — | 15 | 0.1058 | 1.0470 ✗ | +0.221 | |
 | v17 (score_lag1-7, rolling, XGB-MAE) | — | 15 | 0.0681 | 1.0815 ✗ | +0.256 | |
-| v23 (ROLL_WINS ≤90d + LR=0.02 N=2000) | Last-window all | 15 | — | *ausstehend* | | NB1 |
 
 : {.striped .hover}
 
@@ -457,6 +457,66 @@ Die v19-Roll-Fenster (max 180d) sind bereits "zu lang" für den Test — aber 18
 
 > **Merksatz:** Rolling-Fenster müssen zur Test-Datenlänge passen.
 > Features die im Test nicht korrekt berechnet werden können, schaden der Generalisierung — egal wie gut sie im Val sind.
+
+---
+
+## v23: Kürzere Rolling-Fenster (max 90d) — Gegenexperiment zu v21a
+
+v23 testet die direkte Gegenthese zu v21a: wenn >180d-Fenster schaden (91d-Grenze), sollte das Entfernen von 180d-Fenstern helfen. ROLL_WINS=[7,14,30,60,90], LR=0.02, N=2000, sonst identisch mit v19.
+
+```
+v23 Ergebnisse:
+  ROLL_WINS:        [7, 14, 30, 60, 90]  (max=90d, v19: max=180d)
+  Features:         121  (v19: 133, −12 Features: 4 Cols × 3 Stats × 180d entfernt)
+  Val MAE:          0.3095  ← VIEL schlechter als v19 (0.2522)
+  Kaggle MAE:       0.8657  ← fast so schlecht wie v21a (0.8671) ✗
+  LGB val MAE:      0.3435  (v19: 0.2559)
+  CatBoost val MAE: 0.3045  (v19: 0.2594)
+  Blend:            lgb=0.05  xgb=0.05  cat=0.90  ← CatBoost dominiert!
+  LGB Iters:        637/593/675/459/1042  (Woche 5 > 1000!)
+  Runtime:          112.8m
+```
+
+**Das Gegenexperiment schlägt fehl — symmetrisch zu v21a.**
+
+```
+v21a (180d + 270d + 365d):  Kaggle 0.8671 ✗  (zu lang)
+v19  (max 180d):            Kaggle 0.8193 ✓  (sweet spot)
+v23  (max  90d):            Kaggle 0.8657 ✗  (zu kurz)
+```
+
+Beide Extreme (zu lang UND zu kurz) sind etwa gleich schlecht. Das 180d-Fenster ist optimal.
+
+**Warum schadet das Entfernen von 180d?**
+
+| Effekt | Erklärung |
+|---|---|
+| Signalverlust überwiegt Distribution-Shift | 180d-Rolls erfassen saisonale Dürrezyklen. Auch wenn im Test nur 91d verfügbar sind: partielles 180d-Signal > kein 180d-Signal |
+| Val MAE Einbruch bestätigt Signalverlust | 0.3095 vs 0.2522 — Modell ist schlechter, nicht besser |
+| regional_mean_score springt auf 9.3% (Rang 3) | Ohne 180d-Kontext stützt sich Modell auf statischen Regions-Mittelwert → weniger dynamisch |
+| CatBoost übernimmt Blend (90%) | Mit nur 90d-Fenstern kommt LGB nicht mehr mit CatBoost mit → ungewöhnliche Blend-Dominanz |
+
+**Woche 5 trifft Limit trotz N=2000:** LGB Woche 5 braucht 1042 Iterationen (×1.1 = 1146 im Final). Mit reduziertem Feature-Set braucht LGB mehr Bäume um dasselbe zu lernen — ein weiteres Zeichen, dass die 180d-Features echten Informationsgehalt hatten.
+
+**Interpretation: Die 91d-Grenze ist kein KO-Kriterium für 180d-Fenster.**
+Im Test werden roll180-Features mit nur 91 Trainingspunkten berechnet (statt 180). Das verschiebt den Feature-Wert — aber er ist noch korreliert mit dem echten 180d-Wert. Das Modell kann damit umgehen, weil `min_periods=18` bereits im Training auf kurze Perioden trifft.
+
+```
+Training:  roll180_mean = echter 180d-Durchschnitt  ✓
+Test:      roll180_mean = 91d-Durchschnitt           ~ (partiell, aber nützlich)
+            → Verteilungs-Shift vorhanden, aber Signal bleibt erhalten
+
+Training:  roll270_mean = echter 270d-Durchschnitt  ✓
+Test:      roll270_mean = 91d-Durchschnitt           ✗ (zu weit weg, Signal bricht zusammen)
+            → Distribution Shift so groß, dass Signal umkippt
+```
+
+**Revidiertes Merksatz:**
+
+> **Merksatz:** Die 91d-Grenze setzt eine Schranke bei ~180d. Fenster ≤180d sind akzeptabel
+> (partiell berechnet, Signal bleibt erhalten). Fenster >180d (270d, 365d) erzeugen zu großen
+> Distribution-Shift. Fenster <90d entfernen echtes saisonales Signal.
+> Optimum: ROLL_WINS=[7,14,30,60,90,180d] — wie in v19/v22/v24.
 
 ---
 
