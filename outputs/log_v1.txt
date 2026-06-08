@@ -1,0 +1,41 @@
+============================================================
+  run_v1_local  |  Features: 133  |  kein score_lag
+  Kein Cache — alles wird neu berechnet
+============================================================
+
+[1/5] CSV laden ...  [0s]
+   Lese train.csv ...
+   Lese test.csv ...
+   Train: 12,319,040 Zeilen  |  Test: 204,568 Zeilen
+
+[2/5] Feature Engineering (~30 Min) ...  [1.3 Min.]
+   Region 500/2248  [2.4 Min.]
+   Region 1000/2248  [3.6 Min.]
+   Region 1500/2248  [5.1 Min.]
+   Region 2000/2248  [6.8 Min.]
+   Region 2248/2248  [7.6 Min.]
+   Weekly: 1,757,936 Zeilen, 2248 Regionen  [9.6 Min.]
+
+[3/5] Sliding Windows ...  [9.6 Min.]
+   Train: 1,397,823  Val: 449  All: 1,746,696
+  Persistence-Baseline                              MAE = 0.0321
+
+[4/5] Training ...  [11.5 Min.]
+  LightGBM                                          MAE = 0.3293
+    Woche 1: iter= 147  MAE=0.3303
+    Woche 2: iter= 262  MAE=0.3167
+    Woche 3: iter= 436  MAE=0.3307
+    Woche 4: iter= 299  MAE=0.3515
+    Woche 5: iter= 989  MAE=0.3172
+  XGBoost                                           MAE = 0.2932
+Traceback (most recent call last):
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v1_local.py", line 482, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v1_local.py", line 437, in main
+    print(f"\n  Blend: {w_str}  \u2192  MAE = {best_val_mae:.4f}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 31: character maps to <undefined>

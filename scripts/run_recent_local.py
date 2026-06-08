@@ -17,6 +17,9 @@ Vergleich:
   run_v18 (lokal)   → alle Jahre, score_lag gap=13
 """
 from __future__ import annotations
+import sys
+try: sys.stdout.reconfigure(encoding="utf-8"); sys.stderr.reconfigure(encoding="utf-8")
+except AttributeError: pass
 import time
 import warnings
 from pathlib import Path

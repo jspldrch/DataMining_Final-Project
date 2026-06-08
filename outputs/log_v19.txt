@@ -1,0 +1,22 @@
+==============================================================
+  run_v19_timeval  —  Zeit-basierte Validierung
+  VAL_WEEKS=8  |  Features=133  |  kein score_lag
+==============================================================
+Traceback (most recent call last):
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v19_timeval.py", line 714, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v19_timeval.py", line 563, in main
+        print(f"""
+        ~~~~~^^^^^
+      3 Kernunterschiede zum bisherigen Val-Schema:
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+           (nur stabile Phasen im Val) \u2192 zu optimistisch
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    """)
+    ^^^^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 461: character maps to <undefined>

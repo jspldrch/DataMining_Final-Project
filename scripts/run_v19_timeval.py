@@ -91,6 +91,9 @@ Usage:  python scripts/run_v19_timeval.py
 Output: outputs/submission_v19_timeval.csv
 """
 from __future__ import annotations
+import sys
+try: sys.stdout.reconfigure(encoding="utf-8"); sys.stderr.reconfigure(encoding="utf-8")
+except AttributeError: pass
 import time
 import warnings
 from pathlib import Path

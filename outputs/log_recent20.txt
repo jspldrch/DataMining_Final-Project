@@ -1,0 +1,44 @@
+==============================================================
+  run_recent_local  |  RECENT_YEARS=5  |  kein score_lag
+  Kein Cache — alles wird neu berechnet
+==============================================================
+
+[1/5] CSV laden ...  [0s]
+   Lese train.csv ...
+   Lese test.csv ...
+   Train: 12,319,040 Zeilen  |  Test: 204,568 Zeilen
+
+[2/5] Feature Engineering (auf allen Daten) ...  [1.6 Min.]
+   Region 500/2248  [2.6 Min.]
+   Region 1000/2248  [3.6 Min.]
+   Region 1500/2248  [4.9 Min.]
+   Region 2000/2248  [6.5 Min.]
+   Region 2248/2248  [7.4 Min.]
+   Weekly (alle Jahre): 1,757,936 Zeilen, 2248 Regionen  [9.2 Min.]
+
+   Recent-Filter: letzte 5 Jahre pro Region (individueller Cutoff)
+   Behalte 586,728 / 1,757,936 wöchentliche Punkte (33%)
+
+[3/5] Sliding Windows (nur letzte 5 Jahre) ...  [9.3 Min.]
+   Train: 460,544  Val: 449  All: 575,488
+  Persistence-Baseline                              MAE = 0.0321
+
+[4/5] Training ...  [10.0 Min.]
+  LightGBM                                          MAE = 0.2380
+    Woche 1: iter=1000  MAE=0.2382
+    Woche 2: iter=1000  MAE=0.2220
+    Woche 3: iter= 998  MAE=0.2309
+    Woche 4: iter= 990  MAE=0.2466
+    Woche 5: iter= 997  MAE=0.2524
+  XGBoost                                           MAE = 0.2366
+Traceback (most recent call last):
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_recent20_local.py", line 533, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_recent20_local.py", line 483, in main
+    print(f"\n  Blend: {w_str}  \u2192  MAE = {best_val_mae:.4f}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 31: character maps to <undefined>
