@@ -25,8 +25,38 @@ ALLE v31 ÄNDERUNGEN ENTHALTEN:
   Total: 179 Features
 
 KEIN ACCELERATOR NÖTIG.
-Dataset: gleicher Pfad wie v29 (glob findet train.npz/test.npz automatisch)
-Output:  /kaggle/working/submission_v31_stratified.csv
+
+================================================================================
+ DATENPFADE / DATA PATHS  (wichtig für Reproduktion auf Kaggle)
+================================================================================
+Dieses Skript ist für die Ausführung in einem **Kaggle-Notebook** gedacht.
+
+INPUT (gelesen aus /kaggle/input/<dataset-slug>/):
+  - train.npz   (aus train.csv via scripts/convert_to_npz.py erzeugt)
+  - test.npz    (aus test.csv  via scripts/convert_to_npz.py erzeugt)
+  - sample_submission.csv
+
+  Die Helper `_find_npz()` / `_find_sample_sub()` suchen die Dateien automatisch.
+  Akzeptierte Dataset-Slugs (Ordnernamen unter /kaggle/input/):
+      datafinal, datafiles, datatrain, datatest,
+      traindataset, testdataset, data, samplesub, samplesubmission
+  Liegt das hochgeladene Kaggle-Dataset unter einem anderen Slug, wird zusätzlich
+  rekursiv per glob unter /kaggle/input/**/ gesucht – der Slug-Name ist also
+  unkritisch, solange die Dateinamen (train.npz, test.npz,
+  sample_submission.csv) stimmen.
+
+OUTPUT (geschrieben nach /kaggle/working/):
+  - submission_v31_stratified.csv   (finale Kaggle-Submission)
+  - cache_weekly_v31s.npz           (Feature-Cache, beschleunigt Re-Runs)
+  - cache_windows_v31s.npz          (Fenster-Cache)
+
+DATENFLUSS:
+  train.csv / test.csv
+     └─(lokal) python scripts/convert_to_npz.py──▶ train.npz / test.npz
+            └─ als Kaggle-Dataset hochladen ──▶ /kaggle/input/<slug>/
+                   └─ dieses Skript im Kaggle-Notebook ausführen
+                          └─▶ /kaggle/working/submission_v31_stratified.csv
+================================================================================
 """
 from __future__ import annotations
 import time, warnings

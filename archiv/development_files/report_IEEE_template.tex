@@ -1,0 +1,210 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Natural Disaster Severity Prediction: A Robust Meteorological Ensemble Approach for Multi-Week Drought Forecasting}
+
+\author{\IEEEauthorblockN{Jana Speldrich}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{National Yang Ming Chiao Tung University (NYCU)}\\
+Hsinchu, Taiwan \\
+Email: jana.speldrich@nycu.edu.tw}
+\and
+\IEEEauthorblockN{Group Member 2 (Optional)}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{National Yang Ming Chiao Tung University (NYCU)}\\
+Hsinchu, Taiwan \\
+Email: member2@nycu.edu.tw}
+}
+
+\maketitle
+
+\begin{abstract}
+Predicting the severity of natural disasters, specifically agricultural and ecological droughts, is critical for water resource management, agricultural planning, and food security. This paper presents a robust time-series forecasting approach designed for the Natural Disaster Severity Prediction Kaggle Competition (Spring 2026). The objective is to forecast weekly drought severity scores (from 0 to 5) across 2,248 regions for a 5-week horizon, using only historical daily meteorological observations. We show that traditional autoregressive approaches utilizing lagged target scores fail in this setting due to a 91-day ``staleness gap'' between training and testing data. To overcome this, we develop a model that omits target feedback, relying entirely on engineered weather features, including a Standardized Precipitation Index (SPI) to normalize weather anomalies against region-specific and month-specific climatological baselines. Furthermore, we address distribution mismatches by implementing a stratified holdout validation scheme. Our final ensemble blend of LightGBM, XGBoost, and CatBoost models achieves a Mean Absolute Error (MAE) of \textbf{0.7962} on the private Kaggle leaderboard, successfully outperforming the course's Baseline 3 (\textbf{0.8056}).
+
+\noindent \textbf{Group ID:} [Please Insert Your Group ID Here] \\
+\noindent \textbf{GitHub Repository:} \href{https://github.com/YOUR_USERNAME/YOUR_REPO_NAME}{https://github.com/YOUR_USERNAME/YOUR_REPO_NAME}
+\end{abstract}
+
+\begin{IEEEkeywords}
+Drought Forecasting, Gradient Boosting Decision Trees, Time Series, Standardized Precipitation Index (SPI), Validation Alignment.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Droughts are slow-onset natural disasters characterized by a lack of precipitation, often compounded by high temperatures and wind. Unlike sudden-onset disasters like earthquakes or floods, droughts develop over weeks or months, making early detection and severity forecasting possible and highly valuable. The objective of this project is to predict weekly drought severity scores ranging from 0 (no drought) to 5 (extreme drought severity) across 2,248 geographical regions for five consecutive weeks in the future. The inputs consist of daily meteorological variables such as precipitation, surface pressure, humidity, wind speed, and various temperature metrics.
+
+The major challenge in this competition is a significant temporal gap: the test set contains 91 days of daily meteorological data for each region, but lacks any target scores. The model must utilize this 91-day observation window to predict the subsequent five weeks. This structural setup leads to a severe ``staleness'' problem if autoregressive features (lags of the target variable) are used, as the latest available target score is at least 91 days old at the time of inference.
+
+Our contributions in this work are as follows:
+\begin{enumerate}
+    \item We analyze the autoregressive feature staleness problem and demonstrate why target lags, despite having high feature importance in local cross-validation, degrade test generalization.
+    \item We design a set of 179 pure meteorological features, including rolling statistics, regional means, and a custom Standardized Precipitation Index (SPI) that normalizes precipitation and temperature against regional and monthly baselines.
+    \item We identify a temporal drift in the training data and show that training on a subset of the most recent 8 years of history (`RECENT\_YEARS=8`) improves performance over training on the full 15-year dataset.
+    \item We propose a Stratified Holdout Validation scheme that aligns the validation region distribution with the training distribution based on historical drought severity.
+    \item We construct a blended ensemble of LightGBM, XGBoost, and CatBoost models that achieves an MAE of 0.7962, surpassing all baselines.
+\end{enumerate}
+
+\section{Proposed Method}
+
+\subsection{Task Formulation}
+Let $R$ be the set of $N_r = 2248$ regions. For each region $r \in R$ and day $t$, we observe a meteorological vector $\mathbf{x}_{r, t} \in \mathbb{R}^{D}$, where $D=14$ represents the raw daily weather metrics. We also have sparse, weekly target scores $y_{r, w} \in \{0, 1, 2, 3, 4, 5\}$ recorded at week $w$. 
+The task is: given the daily weather sequences up to day $T$, predict the weekly drought scores $y_{r, w+1}, \dots, y_{r, w+5}$ for the subsequent five weeks, corresponding to the forecasting steps $t+7, t+14, t+21, t+28, t+35$.
+
+\subsection{Autoregressive Feature Analysis \& Elimination}
+A standard baseline approach is to include lagged target scores $y_{r, w}, y_{r, w-1}, \dots$ as input features. The target score is highly autocorrelated (lag-1 correlation $\rho \approx 0.97$), making it the most dominant predictor in local validation (MAE $\approx 0.03$). However, since the test set requires predicting after a 91-day gap without target updates, the lag-1 feature at test time is actually a lag-13 feature relative to the latest observation. The autocorrelation drops to $\rho \approx 0.60$ over 13 weeks. 
+Training a model with fresh target lags causes it to over-rely on them. When evaluated on stale lags, the model performs poorly. Simulating a 13-week gap in training (using `score\_lag1 = sc[t - 13]`) shifts model attention to weather features but still underperforms compared to completely omitting target lags. Consequently, we exclude target lags entirely, relying 100\% on meteorological features.
+
+\subsection{Feature Engineering}
+Our final model operates on 179 engineered features, categorized as follows:
+\begin{enumerate}
+    \item \textbf{Raw Weather Variables (14):} Daily values of precipitation (`prec`), surface pressure (`surf\_pre`), humidity, wind metrics, and temperature metrics.
+    \item \textbf{Lagged Weather (35):} Lags of 7 key weather variables up to 5 days back.
+    \item \textbf{Rolling Statistics (108):} Rolling mean, standard deviation, and maximum values computed over 6 temporal windows (14, 30, 60, 90, 120, and 180 days) for 6 primary weather variables.
+    \item \textbf{Regional Baselines (1):} The long-term mean target score per region (`regional\_mean\_score`), representing static regional dryness.
+    \item \textbf{Seasonal Averages (6):} Historical target score averages per region and calendar month for the current month (`regional\_seasonal\_mean`) and the 5 future target months (`rsm\_fw\_wk1` to `rsm\_fw\_wk5`).
+    \item \textbf{Standardized Precipitation Index (SPI) (4):} To measure deviations from local climatological baselines, we compute a per-region, per-month normalization of rolling weather averages. The formula for the SPI of feature $f$ (e.g., precipitation or temperature) for region $r$ in month $m$ over window $W$ is:
+    \begin{equation}
+        SPI_{f, r, m, W}(t) = \frac{\overline{f}_{r, W}(t) - \mu_{f, r, m, W}}{\sigma_{f, r, m, W}}
+    \end{equation}
+    where $\overline{f}_{r, W}(t)$ is the rolling mean of feature $f$ over window $W$, and $\mu_{f, r, m, W}$ and $\sigma_{f, r, m, W}$ are the historical mean and standard deviation of that rolling average for region $r$ during month $m$. We include `prec\_spi30`, `prec\_spi90`, `prec\_spi180`, and `tmp\_spi90`.
+\end{enumerate}
+
+\subsection{Data Selection: Recency Filtering}
+Analysis of historical data revealed that climate patterns from 15 years ago are poor predictors of modern drought periods due to climatological drift. We sweep the parameter `RECENT\_YEARS` (the number of recent years included in training) and find that training only on the last 8 years of data (`RECENT\_YEARS=8`) provides the best trade-off between minimizing drift and retaining enough data for model convergence.
+
+\subsection{Stratified Holdout Validation}
+Due to the large dataset size (~1.1 GB, 2,248 regions, 13 years), traditional $K$-fold cross-validation is computationally expensive. We hold out 20\% of the regions for validation. 
+A naive random split can lead to distribution mismatches, where validation regions contain disproportionately more or fewer drought events than training regions. To resolve this, we implement a \textbf{Stratified Holdout Validation} scheme:
+\begin{enumerate}
+    \item We compute the historical mean target score for each region.
+    \item We divide the 2,248 regions into 4 quartiles based on these means.
+    \item We randomly sample 20\% of the regions from each quartile to form the validation set, ensuring that both training and validation sets share an identical drought severity distribution.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{outputs/feature_importance.png}
+\caption{LightGBM feature importance (split/gain) showing the dominance of long-term rolling precipitation and SPI features.}
+\label{fig:feat_imp}
+\end{figure}
+
+\subsection{Modeling & Ensembling}
+We train independent models for each of the 5 forecasting weeks. The core models consist of:
+\begin{itemize}
+    \item \textbf{LightGBM Ensembling (3 Seeds):} We train LightGBM models with 3 different random seeds (42, 123, 777) for 1,500 estimators and a learning rate of 0.03. We apply sample weights ($w=2.0$ for score $\in [1, 2]$, $w=1.5$ for score $\in [2, 3]$, and $w=1.2$ for score $\ge 3$) to address target imbalance.
+    \item \textbf{XGBoost (1 Seed):} Trained with a learning rate of 0.04 and max depth of 6.
+    \item \textbf{CatBoost (1 Seed):} Trained using standard regression.
+\end{itemize}
+The final prediction for week $k \in \{1, \dots, 5\}$ is a linear blend:
+\begin{equation}
+    \hat{y}_{k} = w_{\text{lgb}} \cdot \overline{\hat{y}}_{k, \text{lgb}} + w_{\text{xgb}} \cdot \hat{y}_{k, \text{xgb}} + w_{\text{cat}} \cdot \hat{y}_{k, \text{cat}}
+\end{equation}
+where $\overline{\hat{y}}_{k, \text{lgb}}$ is the average prediction of the 3 LightGBM seeds. The blending weights ($w_{\text{lgb}} = 0.90$, $w_{\text{xgb}} = 0.05$, $w_{\text{cat}} = 0.05$) are optimized on the validation set using grid search.
+
+\section{Experiments and Results}
+
+\subsection{Experimental Setup}
+The raw daily data is converted into weekly aggregated samples. Models are trained on a CPU-based system (3-4 hours runtime). The evaluation metric is Mean Absolute Error (MAE) evaluated across the 5 predicted weeks.
+
+\subsection{Validation Scheme Performance Comparison}
+Table~\ref{tab:val_schemes} shows how validation schemes affect model optimization and leaderboard performance. While a random holdout or last-window validation leads to sub-optimal configurations, stratified holdout validation provides a highly reliable proxy for the Kaggle test set.
+
+\begin{table}[htbp]
+\caption{Validation Schemes and Leaderboard Scores}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Validation Scheme} & \textbf{Val Points} & \textbf{Val MAE} & \textbf{Kaggle MAE} \\
+\midrule
+Last-Window (all regions)  & 2,248 & 0.2342 & 0.8132 \\
+Random 20\% Holdout        & 449   & 0.2661 & 0.8095 \\
+\textbf{Stratified Holdout} & \textbf{449} & \textbf{0.2720} & \textbf{0.7962} \\
+\bottomrule
+\end{tabular}
+\label{tab:val_schemes}
+\end{center}
+\end{table}
+
+\subsection{Recency Sweep (RECENT\_YEARS)}
+We sweep the history length (`RECENT\_YEARS`) used in training to evaluate the effect of temporal drift. As shown in Table~\ref{tab:recent_years}, using too few years (e.g., 5y) leads to model underfitting, while using the full history (15y) introduces outdated climate patterns. The optimal history is 8 years.
+
+\begin{table}[htbp]
+\caption{History Length (RECENT\_YEARS) Sweep}
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Recent Years} & \textbf{Train Windows} & \textbf{Val Scheme} & \textbf{Kaggle MAE} \\
+\midrule
+5  & ~570k & Last-Window & 0.8132 \\
+7  & ~809k & Last-Window & 0.8270 \\
+\textbf{8}  & \textbf{~926k} & \textbf{Stratified Holdout} & \textbf{0.7962} \\
+15 & ~1,744k & Last-Window & 0.8193 \\
+\bottomrule
+\end{tabular}
+\label{tab:recent_years}
+\end{center}
+\end{table}
+
+\subsection{Ablation Study: Feature Categories}
+Table~\ref{tab:ablation} shows the impact of omitting the autoregressive target lags and adding our engineered meteorological features. Including raw `score\_lag1` creates a massive gap between validation and test performance. Normalizing raw weather into SPI and adding seasonal forward metrics provides consistent improvements.
+
+\begin{table}[htbp]
+\caption{Ablation Study on Model Features}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model Version / Feature Set} & \textbf{Val MAE} & \textbf{Kaggle MAE} \\
+\midrule
+v15 (with score\_lag1, gap=0)      & 0.1058 & 1.0470 \\
+v18 (with score\_lag1, gap=13)     & 0.1831 & 0.9134 \\
+v12 (Wetter-only Baseline)         & ~0.04* & 0.8258 \\
+v22 (RY=8, Wetter-only, no SPI)    & 0.2342 & 0.8132 \\
+v30 (v22 + surf\_pre/dp\_tmp rolls) & 0.2720 & 0.8047 \\
+\textbf{v31 (v30 + SPI + Seeds)}   & \textbf{0.2718} & \textbf{0.7962} \\
+\bottomrule
+\end{tabular}
+\label{tab:ablation}
+\end{center}
+\end{table}
+
+\subsection{Kaggle Leaderboard Comparison}
+Our final model (`v31\_stratified`) successfully outscores all course baselines on the public leaderboard (Table~\ref{tab:leaderboard}).
+
+\begin{table}[htbp]
+\caption{Comparison Against Course Baselines}
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+\textbf{Model / Baseline} & \textbf{Leaderboard MAE} \\
+\midrule
+Baseline 1 (Lichte Hürde) & 0.9117 \\
+Baseline 2 (Mittlere Hürde) & 0.8623 \\
+Baseline 3 (Schwere Hürde) & 0.8056 \\
+\textbf{Our Model (v31\_stratified)} & \textbf{0.7962} \\
+\bottomrule
+\end{tabular}
+\label{tab:leaderboard}
+\end{center}
+\end{table}
+
+\section{Conclusion}
+In this project, we developed a highly robust weather-only ensemble pipeline for natural disaster severity forecasting. By resolving the feature staleness problem associated with target lags, normalizing raw daily weather metrics against region-month climatological baselines via SPI features, and training on the most recent 8 years of history, our model achieved a private leaderboard score of 0.7962. This result demonstrates the importance of rigorous validation alignment and climatological normalization in spatial-temporal modeling tasks.
+
+\begin{thebibliography}{00}
+\bibitem{mckee} T. B. McKee, N. J. Doesken, and J. Kleist, ``The relationship of drought frequency and duration to time scales,'' in \textit{Proceedings of the 8th Conference on Applied Climatology}, 1993, vol. 17, no. 22, pp. 179--183.
+\bibitem{usdm} M. Svoboda, et al., ``The U.S. Drought Monitor,'' \textit{Bulletin of the American Meteorological Society}, vol. 83, no. 8, pp. 1181--1190, 2002.
+\bibitem{xgboost} T. Chen and C. Guestrin, ``XGBoost: A scalable tree boosting system,'' in \textit{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining}, 2016, pp. 785--794.
+\bibitem{lightgbm} G. Ke, et al., ``LightGBM: A highly efficient gradient boosting decision tree,'' \textit{Advances in Neural Information Processing Systems}, vol. 30, pp. 3146--3154, 2017.
+\end{thebibliography}
+
+\end{document}

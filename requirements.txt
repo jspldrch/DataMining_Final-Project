@@ -1,11 +1,25 @@
+# Python 3.10 (Kaggle notebook environment)
+#
+# Model versions are pinned to match the figures reported in the paper
+# (report.tex, Experiments section). The final model
+# (scripts/kaggle_v31_stratified.py) imports lightgbm, xgboost and catboost.
+
+# Core data stack
 pandas
 numpy
+scikit-learn
+pyarrow
+
+# Gradient boosting models (pinned to the versions used for the reported results)
+lightgbm==3.3.5
+xgboost==1.7.5
+catboost==1.2
+
+# Plotting (feature importance figure)
 matplotlib
 seaborn
-scikit-learn
-lightgbm
-xgboost
+
+# Notebook / utilities
 ipykernel
 notebook
 tqdm
-pyarrow
