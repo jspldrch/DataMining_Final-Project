@@ -17,6 +17,8 @@ data-mining-2026-final-project/
 !resources/sample_submission.csv
 *.zip
 *.parquet
+*.npz
+outputs/cache/
 
 # Agent / IDE
 GEMINI.md

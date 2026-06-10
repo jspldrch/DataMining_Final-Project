@@ -1,0 +1,125 @@
+============================================================
+  run_v28_local  |  Features: 153  |  RY=8
+  +VPD: 19 Features (1 direkt + 18 Rolls)
+  +regional_week_mean: 52 Werte/Region (vs 12 monatlich)
+  LGB: 5 Seeds × 5 Wochen = 25 Modelle
+  Val: Last-Window alle Regionen (~2248 Punkte)
+  Output: C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\outputs\submission_v28_local.csv
+  Log:    C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\outputs\log_v28_local.txt
+============================================================
+
+[1/5] Weekly Features laden ... [0s]
+  Kein Cache -- Feature Engineering (~20 Min) ... [0s]
+    500/2248 [2.5m]
+    1000/2248 [4.4m]
+    1500/2248 [6.5m]
+    2000/2248 [8.9m]
+    2248/2248 [10.2m]
+  Weekly Cache gespeichert [15.1m]
+  1,757,936 Zeilen  |  2248 Regionen
+
+[2/5] Recent-Filter: letzte 8 Jahre ... [15.1m]
+  Nach Filter: 939,664 Zeilen  (53% behalten)
+
+[3/5] Windows bauen ... [15.2m]
+  Baue Windows (RY=8, last-window val) ... [15.2m]
+  Windows Cache gespeichert [18.2m]
+  Train: 926,176  Val: 2,248  All: 928,424
+  Persistence Baseline                                  MAE=0.0346
+
+[4/5] Training (5 Seeds × 5 Wochen = 25 Modelle) ... [18.3m]
+  LightGBM (5-Seed Avg)                                 MAE=0.2367
+    Woche 1: [999, 1000, 998, 995, 993]  avg=997 ← LIMIT
+    Woche 2: [706, 635, 986, 934, 521]  avg=756
+    Woche 3: [886, 896, 594, 330, 713]  avg=684
+    Woche 4: [528, 919, 998, 993, 775]  avg=843 ← LIMIT
+    Woche 5: [1000, 983, 902, 985, 984]  avg=971 ← LIMIT
+  Referenz v24(1 Seed): 784/987/547/1000/943
+  XGBoost                                               MAE=0.3010
+  Blend: lgb=0.95 xgb=0.05  MAE=0.2391
+  Referenz v24(8y,1seed,seasonal): lgb=0.90 cat=0.05 xgb=0.05  MAE=0.2314
+
+============================================================
+  FEATURE IMPORTANCE (LGB Gain, seed=42, avg wk1-5)
+  Rank  Feature                                      %
+  1     prec_roll90_mean                        14.52%
+  2     vpd_roll180_max                         12.30% (VPD)
+  3     prec_roll180_mean                       12.23%
+  4     prec_roll60_mean                         7.93%
+  5     regional_mean_score                      5.06%
+  6     tmp_roll180_max                          3.37%
+  7     regional_week_mean                       3.11% (week)
+  8     prec_deficit_90d                         2.98%
+  9     prec_roll180_std                         2.72%
+  10    wind_roll180_mean                        2.15%
+  11    tmp_roll180_mean                         1.26%
+  12    wind_roll180_max                         1.14%
+  13    prec_roll30_mean                         1.08%
+  14    surf_pre_lag1                            1.07%
+  15    humidity_roll180_max                     0.92%
+  16    vpd_roll180_std                          0.90% (VPD)
+  17    humidity_roll180_std                     0.86%
+  18    surf_pre_lag21                           0.81%
+  19    humidity_deficit_90d                     0.74%
+  20    prec_roll90_std                          0.73%
+  21    tmp_roll90_std                           0.69%
+  22    humidity_roll180_mean                    0.68%
+  23    prec_roll180_max                         0.67%
+  24    tmp_anomaly_90d                          0.67%
+  25    wind_roll60_mean                         0.66%
+
+  Gruppen:
+    Rolling Stats (ohne VPD):   61.2%
+    VPD Features (NEU):         17.9%
+    Dürre-Indices:               5.3%
+    Regional mean (jährlich):    5.1%
+    Regional week mean (NEU):    3.1%
+    Lags:                        4.8%
+  Top-10 kumulativ:           66.4%
+============================================================
+
+
+[5/5] Final Training (928,424 Windows, Multi-Seed) ... [320.8m]
+Traceback (most recent call last):
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v28_local.py", line 570, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v28_local.py", line 524, in main
+    f_lgb = train_lgb_multiseed(X_all, y_all, None, None, avg_iters)
+  File "C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\scripts\run_v28_local.py", line 359, in train_lgb_multiseed
+    m.fit(X_tr, y_tr[:,wk].ravel(), **kw)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\site-packages\lightgbm\sklearn.py", line 1398, in fit
+    super().fit(
+    ~~~~~~~~~~~^
+        X,
+        ^^
+    ...<11 lines>...
+        init_model=init_model,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\site-packages\lightgbm\sklearn.py", line 1049, in fit
+    self._Booster = train(
+                    ~~~~~^
+        params=params,
+        ^^^^^^^^^^^^^^
+    ...<6 lines>...
+        callbacks=callbacks,
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\site-packages\lightgbm\engine.py", line 350, in train
+    booster.model_from_string(booster.model_to_string()).free_dataset()
+                              ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\janas\AppData\Local\Programs\Python\Python313\Lib\site-packages\lightgbm\basic.py", line 4592, in model_to_string
+    _LIB.LGBM_BoosterSaveModelToString(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._handle,
+        ^^^^^^^^^^^^^
+    ...<5 lines>...
+        ptr_string_buffer,
+        ^^^^^^^^^^^^^^^^^^
+    )
+    ^
+KeyboardInterrupt

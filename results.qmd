@@ -27,11 +27,17 @@ Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
 
 | Script | Val-Schema | RECENT_YEARS | Val MAE | **Kaggle MAE** | Δ vs. v12 | Bemerkung |
 |--------|:-:|:-:|:-:|:-:|:-:|---|
-| **recent_local** *(CSV, holdout)* | 20%-Holdout | 8 | 0.2661 | **0.8095 ✓✓** | **−0.0163** | **Bestes Modell** |
-| v24 (8y + seasonal_mean) | Last-window all | 8 | 0.2314 | 0.8106 ✓✓ | −0.0152 | 2. bestes! |
+| **v31_stratified (SPI+3-Seed, 179 feat)** | Stratif. Holdout | 8 | — | **0.7962 ✓✓✓** | **−0.0296** | **NEUES BEST!** |
+| v30 (surf_pre+dp_tmp rolls, 175 feat) | 20%-Holdout | 8 | 0.2720 | 0.8047 ✓✓✓ | −0.0211 | |
+| v32_fast (traj+SPI+3-Seed, 186 feat) | Stratif. Holdout | 8 | — | 0.8090 ✓✓ | −0.0168 | XGB GPU; traj hurt |
+| **recent_local** *(CSV, holdout)* | 20%-Holdout | 8 | 0.2661 | 0.8095 ✓✓ | −0.0163 | |
+| v24 (8y + seasonal_mean) | Last-window all | 8 | 0.2314 | 0.8106 ✓✓ | −0.0152 | |
+| v27 (8y, 5-Seed LGB, 133 feat) | Last-window all | 8 | 0.2274 | 0.8113 ✓✓ | −0.0145 | Multi-Seed < Feature |
 | v22 *(NB3, 5y, last-window)* | Last-window all | 5 | 0.2342 | 0.8132 ✓ | −0.0126 | |
 | v22_recent8 *(NB3, 8y, last-window)* | Last-window all | 8 | 0.2342 | 0.8132 ✓ | −0.0126 | = v22 5y! |
+| v27_local (133 feat, 5-Seed, lokal) | Last-window all | 8 | 0.2274 | 0.8159 | −0.0099 | = v27_multi lokal |
 | v25 (Last-year val, 52w/region) | Last-year (52 Win.) | 9 | — | 0.8163 | −0.0095 | |
+| v28 (VPD+week_mean, 5-Seed, 153 feat) | Last-window all | 8 | 0.2390 | 0.8185 | −0.0073 | VPD schlechter als v22 |
 | v21b (LR=0.02, N=2000, ×1.1) | Last-window all | 15 | 0.2528 | 0.8192 ✓ | −0.0066 | ≈v19 |
 | v19 *(Last-window all regions)* | Last-window all | 15 | 0.2522 | 0.8193 ✓ | −0.0065 | |
 | **v12** *(Baseline)* | 20%-Holdout | 15 | ~0.04 | 0.8258 | — | |
@@ -47,10 +53,12 @@ Metrik: **MAE** (Mean Absolute Error), niedriger = besser.
 
 : {.striped .hover}
 
-> **Kernbeobachtung:** **recent_local (8y, Kaggle 0.8095) = bestes Modell.**
-> **v24 (8y + seasonal_mean, 0.8106) = zweitbestes** — knapp dahinter und auf Kaggle stärker als v22 5y (0.8132).
-> **RECENT_YEARS-Sweep (last-window val):** 5y=0.8132  7y=0.8270(!)  **8y=0.8132** (= 5y!)  15y=0.8193 → 7y einziger Ausreißer. 5y und 8y last-window identisch — Vorteil von 8y nur mit Holdout-Val (0.8095).
-> `regional_seasonal_mean` (Rang 7, 2.9%) hilft: v24 verbessert v22 um 0.0026.
+> **Kernbeobachtung:** **v31_stratified (SPI+3-Seed, 179 feat, Kaggle 0.7962) = NEUES BESTES MODELL.**
+> SPI-Normalisierung + stratifizierter Holdout + 3-Seed LGB (N=1500) auf Basis von v30 (surf_pre+dp_tmp Rolls) ergeben den bisher besten Score.
+> **v32_fast (186 feat, 0.8090) ist schlechter als v31 (0.7962)** — Trajectory-Features und verkürztes XGB (N=1000) helfen nicht.
+> **Holdout-Val > Last-Window Val**: Alle Modelle mit Holdout-Val liegen besser — v31 (0.7962), v30 (0.8047), v32 (0.8090), recent_local (0.8095) schlagen v24/v27/v22 (last-window).
+> **surf_pre+dp_tmp Rolls (v30→v31):** Echte neue Signale (+0.0085 gegenüber recent_local).
+> **v27_local vs. v27_multiseed:** Gleiche Logik, lokale Ausführung → 0.8159 vs 0.8113 (Kaggle). Δ=0.0046 durch Plattform/Bibliotheks-Unterschiede (Windows vs. Linux).
 
 ---
 
@@ -397,6 +405,255 @@ RECENT_YEARS-Sweep gesamt (last-window val):
 **Kern-Diagnose:** Die zwei LGB-Limit-Treffer bei Wochen 2 und 4 sind der wahrscheinlichste Schuldige. Das Modell konvergiert für diese Wochen nicht → Predictions für Woche 2 und 4 sind systematisch schlechter, was den Kaggle-MAE über alle 5 Wochen stark anhebt.
 
 **Schlussfolgerung:** 7y mit N=1000 ist unterfit. Entweder N=2000 testen (wie v21b-Ansatz) oder 7y überspringen und stattdessen 8y bestätigen. Der RECENT_YEARS-Sweet-Spot ist **8y, nicht 7y**.
+
+---
+
+## v27: 5-Seed LGB Ensemble — Ergebnisse & Interpretation
+
+v27 ersetzt den einzelnen LGB-Seed durch ein 5-Seed-Ensemble (Seeds: 42, 123, 777, 2024, 31415), Predictions werden gemittelt. XGBoost und CatBoost bleiben 1-Seed. Sonst identisch mit v22_recent8 (133 Features, RY=8, last-window val).
+
+```
+v27 Ergebnisse:
+  RECENT_YEARS:    8  (53% der Daten, 926.176 Train-Fenster)
+  Features:        133  (identisch v22)
+  LGB Seeds:       [42, 123, 777, 2024, 31415]
+  Avg iters/Woche: [869, 920, 614, 900, 994]  ← Wo 1,2,4,5 HIT LIMIT
+  Val MAE (LGB 5-seed avg): 0.2274  ← besser als v24 (0.2314)
+  Blend val MAE:   0.2306  ← besser als v24 (0.2314) aber Blend xgb/cat weniger Einfluss
+  Kaggle MAE:      0.8113  ← besser als v22 (0.8132), schlechter als v24 (0.8106)
+  Blend:           lgb=0.90 xgb=0.05 cat=0.05
+  Runtime:         216.7m  (~3.6 Std.)
+```
+
+**Was sagt der Score 0.8113?**
+
+| Modell | Seeds | Features | Kaggle | vs. v22 |
+|---|:-:|:-:|:-:|:-:|
+| v22_recent8 | 1 | 133 | 0.8132 | — |
+| **v27** | **5** | 133 | **0.8113** | **−0.0019 ✓** |
+| v24 | 1 | 134 (+seasonal) | 0.8106 | −0.0026 ✓ |
+
+**Multi-Seed hilft — aber weniger als das richtige Feature.**
+5 Seeds verbessern gegenüber 1 Seed um 0.0019. Das neue Feature `regional_seasonal_mean` (v24 gegenüber v22) verbessert um 0.0026. Ein gutes Feature schlägt Ensemble-Averaging.
+
+**Val-Verbesserung vs. Kaggle-Verbesserung:**
+
+| Modell | Val MAE | Kaggle MAE | Val − Kaggle |
+|---|:-:|:-:|:-:|
+| v22 | 0.2342 | 0.8132 | 0.5790 |
+| v24 | 0.2314 | 0.8106 | 0.5792 |
+| **v27** | **0.2274** | **0.8113** | 0.5839 |
+
+v27 hat das beste Val MAE (0.2274), aber nicht das beste Kaggle-Ergebnis. Die Val-Verbesserung durch mehr Seeds (Varianzreduktion) ist größer als die echte Generalisierungsverbesserung auf dem Kaggle-Test.
+
+**Iter-Limit Problem:**
+Wochen 1, 2, 4, 5 haben mindestens einen Seed bei N=1000. Das dämpft die Seed-Diversität: wenn alle Seeds am Limit enden, mittelt man über ähnliche Modelle statt über wirklich diverse.
+
+```
+Woche 1: [813, 931, 1000, 604, 996]  — Seed 3 am Limit
+Woche 2: [616, 1000, 991, 999, 994]  — Seed 2 am Limit
+Woche 4: [996, 987, 967, 722, 827]   — Seed 1 nah am Limit
+Woche 5: [981, 999, 992, 1000, 998]  — Seed 4 am Limit
+```
+
+N=1500 würde echte Konvergenz für alle Seeds erlauben → bessere Ensemble-Diversität.
+
+**Schlussfolgerung:**
+Multi-Seed LGB Ensemble ist eine effektive, einfach umsetzbare Verbesserung (+0.0019). Die wahre Stärke liegt aber in der Kombination: 5 Seeds + mehr Features (wie v28 mit VPD + week_mean). Einzeln ist ein gutes Feature (seasonal_mean) wertvoller als mehr Seeds.
+
+---
+
+## v31_stratified: SPI + Stratified Holdout — Neues Bestes Modell
+
+v31_stratified baut auf v30 (surf_pre+dp_tmp Rolls) auf und fügt hinzu: SPI-Features (Standardized Precipitation Index für verschiedene Zeitfenster), Stratifizierung des Holdout-Val nach Dürre-Quartilen, 3-Seed LGB mit N=1500/LR=0.03, und mildere Sample-Gewichte (1.3/1.2/1.1 statt v30's 2.0/1.5/1.2).
+
+```
+v31_stratified Setup:
+  RECENT_YEARS:     8
+  Features:         179
+  Neue Features:    prec_spi30, prec_spi90, prec_spi180, tmp_spi90  (+SPI)
+  ROLL_COLS:        prec, humidity, tmp, wind, surf_pre, dp_tmp  (= v30)
+  Val-Schema:       Stratifizierter Holdout (4 Dürre-Quartile × 20%)
+  LGB Seeds:        [42, 123, 777]  (3 Seeds, N=1500, LR=0.03)
+  Sample weights:   1.3/1.2/1.1  (reduziert vs. v30: 2.0/1.5/1.2)
+  Kaggle MAE:       0.7962  ← NEUES BEST (vormals v30: 0.8047)
+  Δ vs. v30:        −0.0085
+```
+
+**Was hat den Sprung von 0.8047 → 0.7962 gebracht?**
+
+| Neuerung | Herkunft | Erklärter Effekt |
+|---|---|---|
+| SPI-Features | v31 neu | Klimatologisch normalisierter Niederschlag/Temperatur — entfernt Saison-Bias |
+| Stratifizierter Holdout | v31 neu | Val-Regionen haben gleiche Score-Verteilung wie Train → besser kalibriertes Early Stopping |
+| N=1500, LR=0.03 | v31 | Mehr Bäume für 179 Features (v30 alle 5 Wochen nah am Limit) |
+| Mildere Gewichte 1.3/1.2/1.1 | v31 | v30 zeigte 2.0 zu aggressiv → LGB fiel zurück; 1.3 max gibt LGB einen echten Vorteil |
+| 3-Seed LGB | v31 | Leichte Ensemble-Verbesserung wie v27 (+0.0019) |
+
+**SPI-Features:** Der Standardized Precipitation Index normalisiert Niederschlag und Temperatur gegen die klimatologische Baseline der Region — er misst wie "abnormal" der aktuelle Niederschlag ist, nicht den absoluten Wert. Das ist genau das Signal das Dürre-Modelle brauchen.
+
+**Stratifizierter Holdout vs. Random Holdout:**
+Ein zufälliger 20%-Holdout kann systematisch mehr oder weniger dürregeprägte Regionen ins Val-Set ziehen. Wenn Val-Regionen im Schnitt Dürrescore 0.8 haben und Train-Regionen 1.2, kalibriert Early Stopping auf die "leichte" Val-Verteilung → zu früh gestoppt. Stratifizierung über 4 Quartile behebt das.
+
+**Schlussfolgerung:**
+v31_stratified = v30 + SPI + besseres Val-Schema + mehr LGB-Kapazität. Das Zusammenspiel bringt 0.0085 Verbesserung. Nächster Hebel: weitere SPI-Variablen (humidity_spi, surf_pre_spi) oder höhere Seed-Anzahl.
+
+---
+
+## v32_fast: Trajectory-Features + Multi-Seed XGB — Ergebnisse & Interpretation
+
+v32_fast erweitert v31_stratified um Trajectory-Features (12-Wochen-Delta für 5 Key-Features), Extended SPI (surf_pre_spi90, dp_tmp_spi90), Multi-Seed XGB (3 Seeds, N=1000, GPU wenn verfügbar) und lässt CatBoost weg.
+
+```
+v32_fast Setup:
+  RECENT_YEARS:    8
+  Features:        186  (+7 vs. v31: traj×5 + surf_pre_spi90 + dp_tmp_spi90)
+  LGB Seeds:       [42, 123, 777]  (N=1500, LR=0.03)
+  XGB Seeds:       [42, 123, 777]  (N=1000, LR=0.03, GPU-Beschleunigung)
+  CatBoost:        weggelassen
+  Val-Schema:      Stratifizierter Holdout  (= v31)
+  Kaggle MAE:      0.8090  ← schlechter als v31 (0.7962) und v30 (0.8047) ✗
+  Laufzeit:        ~2h mit GPU, ~3.5h ohne
+```
+
+**v32 ist schlechter als v31 — trotz mehr Features.**
+
+| Modell | Features | Kaggle |
+|---|:-:|:-:|
+| v31_stratified | 179 | 0.7962 |
+| **v32_fast** | **186** | **0.8090** ✗ |
+| v30 | 175 | 0.8047 |
+
+7 mehr Features (Trajectory + extended SPI) verschlechtern den Score um 0.0128.
+
+**Mögliche Ursachen:**
+
+| Hypothese | Erklärung |
+|---|---|
+| Trajectory-Features schaden | 12-Wochen-Delta = Differenz zweier Rolls — im Test (91d-Grenze) wird der Anfangswert auf unvollständigen Daten berechnet → Distribution Shift |
+| XGB N=1000 zu wenig | v31 nutzt N=1500 für LGB; XGB mit N=1000 könnte bei 186 Features unterfit sein |
+| Kein CatBoost | CatBoost hatte in v30 nur 5% Blend-Gewicht → Weglassen sollte neutral sein, aber könnte subtil fehlen |
+| Extended SPI (surf_pre/dp_tmp) | Diese Variablen sind im Test kürzer berechnet (91d) — SPI auf partiellen Daten verschlechtert sich mehr als der einfache Rollwert |
+
+**Schlussfolgerung:**
+Trajectory-Features (Delta über 12 Wochen) und extended SPI für surf_pre/dp_tmp schaffen keinen Mehrwert — der Distribution Shift durch die 91d-Test-Grenze trifft Delta-Features noch härter als absolute Rolling-Features. v31_stratified bleibt das beste Modell.
+
+---
+
+## v28: VPD + regional_week_mean — Ergebnisse & Interpretation
+
+v28 kombiniert v27 (5-Seed LGB) mit zwei neuen Feature-Gruppen: 19 VPD-Features (Magnus-Formel aus `tmp` und `humidity`, rolling + direkt) und `regional_week_mean` (52 Wochenmittelwerte pro Region statt 12 Monatsmittel). 153 Features gesamt, last-window val.
+
+```
+v28 Ergebnisse:
+  RECENT_YEARS:    8  (928.424 Train-Fenster)
+  Features:        153  (+VPD 19, +week_mean 1 vs. v27 133)
+  LGB Seeds:       [42, 123, 777, 2024, 31415]
+  Avg iters/Woche: [997, 756, 684, 843, 971]  ← Wo 1 nah am Limit
+  LGB val MAE:     0.2367  (v27: 0.2274 — SCHLECHTER!)
+  Blend val MAE:   0.2390  (v27: 0.2306 — SCHLECHTER!)
+  Kaggle MAE:      0.8185  ← schlechter als v22 (0.8132) und v27 (0.8113) ✗
+  Blend:           lgb=0.90 xgb=0.05 cat=0.05
+  Runtime:         257.1m
+```
+
+**VPD: hohe Feature-Importance, schlechtes Kaggle-Ergebnis — Widerspruch.**
+
+```
+VPD Feature-Importance:  17.9%  (vpd_roll180_max = Rang 2, 12.3%!)
+regional_week_mean:        3.1%  (Rang 7)
+→ VPD verdrängt tmp_roll180_max (war Rang 3) → absorbiert Signal
+```
+
+VPD hat hohe Importance, weil es `tmp` und `humidity` nichtlinear kombiniert. Es verdrängt individuelle Temperatur-/Feuchtigkeits-Features — aber der Kaggle-Score verschlechtert sich trotzdem.
+
+**Warum schadet VPD trotz hoher Importance?**
+
+| Effekt | Erklärung |
+|---|---|
+| 91d-Grenzproblem verstärkt | VPD = f(tmp, humidity) — beide haben Distribution Shift im Test. Nichtlineare Kombi verstärkt den Shift |
+| Signalabsorption ohne Informationsgewinn | vpd_roll180 ≈ tmp_roll180 + humidity_roll180 kombiniert. Kein neues Signal — nur nichtlineare Redundanz |
+| Val nutzt volle History | Im Trainings-Val: VPD echte 180d-Werte. Im Kaggle-Test: VPD aus 91d-Fenstern → anderes Feature |
+| Val MAE trotzdem schlechter | 0.2390 vs. v27 0.2306 — VPD hilft selbst lokal nicht |
+
+**Vergleich v27 vs. v28 — Multi-Seed ohne/mit VPD:**
+
+| Modell | Features | Val MAE | Kaggle |
+|---|:-:|:-:|:-:|
+| v27 (5-Seed, 133 feat) | kein VPD | 0.2274 | 0.8113 |
+| **v28 (5-Seed, 153 feat, +VPD)** | +VPD | 0.2390 | 0.8185 |
+| Δ | +20 Features | **+0.0116 ✗** | **+0.0072 ✗** |
+
+VPD verschlechtert val MAE um 0.0116 und Kaggle um 0.0072. Obwohl vpd_roll180_max auf Rang 2 landet, ist es kein besseres Signal — es substituiert bestehende Features mit einer verrauschten nichtlinearen Kombination.
+
+**regional_week_mean (3.1%, Rang 7):**
+Das Feature ist nützlich (höher als regional_seasonal_mean in v24, 2.9%), aber VPD überschattet den potenziellen Gewinn. Isoliert wäre regional_week_mean ohne VPD ein sauberer Test.
+
+**Schlussfolgerung:**
+VPD = inhärent aus den vorhandenen Wetter-Features berechnet → kein unabhängiges neues Signal. Im Test-Set verstärkt die nichtlineare Kombination den Distribution Shift (91d-Grenze). Die Lektion: hohe Feature-Importance bedeutet *Signal-Absorption*, nicht notwendigerweise *bessere Generalisierung*.
+
+> **Merksatz:** Features die aus bestehenden Features berechnet werden (VPD = f(tmp, humidity)) können hohe Importance bekommen indem sie andere Features verdrängen — ohne die tatsächliche Vorhersagegüte zu verbessern.
+
+---
+
+## v30: surf_pre + dp_tmp Rolls — Neues Bestes Modell
+
+v30 erweitert den Feature-Set um Rolling-Statistiken für `surf_pre` (Bodenluftdruck) und `dp_tmp` (Taupunkt): je 5 Fenster (7/14/30/60/90/180d) × 3 Stats (mean/max/std) = 36 neue Features → 175 gesamt. Zusätzlich enthält v30 die Forward-Seasonal-Features (`rsm_fw_wk1–5`) aus v29 und nutzt 20%-Holdout-Val (wie recent_local).
+
+```
+v30 Ergebnisse:
+  RECENT_YEARS:    8  (939.664 gefilterte Rows)
+  Features:        175  (+36 surf_pre/dp_tmp Rolling vs. v24)
+  Sample weights:  nein (Fallback zu unweighted — gewichtetes LGB schlechter)
+  Val MAE (blend): 0.2720
+  Kaggle MAE:      0.8047  ← NEUES BEST (vormals recent_local: 0.8095)
+  Blend:           lgb=0.05 xgb=0.90 cat=0.05
+  LGB iters:       [993, 999, 998, 999, 995]  ← alle nah am Limit
+  Runtime:         109.5m
+```
+
+**Warum 0.8047 — das bisher beste Ergebnis?**
+
+| Neue Feature-Gruppe | Avg Gain | Rang Beispiel | Signal |
+|---|:-:|---|---|
+| surf_pre Rolling (6 Fens. × 3 Stats) | **8.7%** | #9 surf_pre_roll90_std | Bodendruckvariabilität = Wettersystemstärke |
+| dp_tmp Rolling (6 Fens. × 3 Stats) | **3.5%** | #19 dp_tmp_roll180_std | Feuchteverlauf = latente Dürreentwicklung |
+| rsm_fw (Forward Seasonal, v29) | **6.8%** | #6 rsm_fw_wk5 | Saisonale Erwartung für Vorhersagezeitraum |
+
+surf_pre und dp_tmp tragen zusammen **12.2%** — verdrängten Teile der direkten Wetter-Features. Das Signal ist echt.
+
+**Warum dominiert XGBoost (Blend 0.90)?**
+
+LGB traf mit gewichteter Loss fast alle Iter-Limits (993–999) → MAE 0.3380, schlechter als ungewichtet (0.3293). Das Skript fiel automatisch zurück. Mit ungewichtetem LGB bleibt LGB Val MAE ~0.3293 — deutlich schlechter als XGBoost (0.2703). Das lässt XGBoost in der Blend-Optimierung dominieren.
+
+```
+LGB (gewichtet):   MAE 0.3380  → Fallback auf ungewichtet
+LGB (ungewichtet): MAE 0.3293  → schwach, alle Wochen ~1000 Iters
+XGBoost:           MAE 0.2703  ← BESTES Einzelmodell
+CatBoost:          MAE 0.3232
+Blend:             lgb=0.05 xgb=0.90 cat=0.05
+```
+
+Warum ist LGB schwach bei 175 Features? Alle 5 Wochen stoppen nah an N=1000 → LGB unterfit. XGBoost konvergiert besser mit dem erweiterten Feature-Set.
+
+**Vergleich mit Vorgängern:**
+
+| Modell | Holdout-Val | Features | Kaggle |
+|---|:-:|:-:|:-:|
+| recent_local | ✓ | 133 | 0.8095 |
+| **v30** | **✓** | **175** | **0.8047** |
+| v24 | ✗ (last-win) | 134 | 0.8106 |
+
+v30 verbessert recent_local um **0.0048** durch surf_pre + dp_tmp Rolls allein.
+
+**Schlussfolgerung:**
+surf_pre und dp_tmp Rolling sind echte Dürresignale — Bodenluftdruckvariabilität und Taupunktentwicklung erfassen Wettersysteme, die Niederschlags- und Temperaturfeatures allein nicht vollständig abbilden. Die Kombination aus Holdout-Val + 175 Features + XGBoost-Dominanz ergibt das bisher beste Ergebnis (0.8047).
+
+**Nächste Schritte von hier:**
+- LGB Iterationslimit erhöhen (N=1500–2000) damit LGB mit 175 Features konvergiert
+- Sample weights anpassen (weniger aggressiv: 1.5/1.2/1.0 statt 2.0/1.5/1.2)
+- 5-Seed LGB Ensemble hinzufügen (v27 +0.0019 Verbesserung durch Seeds)
+- VPD + weekly mean (v28-Features) kombinieren
 
 ---
 

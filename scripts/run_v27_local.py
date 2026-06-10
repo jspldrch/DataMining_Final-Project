@@ -1,40 +1,25 @@
 """
-kaggle_v28_vpd_weekly.py  --  RY=8 + Multi-Seed + VPD + Weekly Seasonality
-============================================================================
-Base:        v27_multiseed (RECENT_YEARS=8, last-window val, 133 features, 5-seed LGB)
-Kaggle ref:  recent_local=0.8095  v24(8y+seasonal)=0.8106  v22_5y=0.8132
+run_v27_local.py  --  lokale Version von kaggle_v27_multiseed
+=============================================================
+RECENT_YEARS=8, 133 Features, Last-Window Val, 5-Seed LGB Ensemble
+Identische Logik wie kaggle_v27_multiseed.py, nur lokale Pfade.
 
-TWO ADDITIONAL CHANGES vs v27:
-
-1. VPD (Vapor Pressure Deficit) approximation  -- 19 new features
-   The physically most motivated drought index missing from the feature set.
-   High VPD = atmosphere pulls water from soil/plants aggressively -> drought.
-   vpd_approx = e_sat * (1 - humidity/100)
-   where e_sat ≈ 6.112 * exp(17.67 * tmp / (tmp + 243.5))  [Magnus formula]
-   + rolling mean/std/max for all 6 windows (7,14,30,60,90,180d) = 18 more features
-
-2. regional_week_mean  -- replaces/extends monthly seasonal baseline
-   v24 showed regional_seasonal_mean (monthly, 12 values/region) helps at 2.9% gain.
-   Weekly resolution (52 values/region) should capture finer seasonal patterns.
-   week_of_year = ((month-1)*31 + day) // 7  -> 0..52 in proprietary calendar
-   regional_week_mean = avg score per (region_id, week_of_year) from full history
-
-Total features: 133 + 1(vpd) + 18(vpd_rolls) + 1(week_mean) = 153 features
-Weekly cache cannot be reused (new features) -> cache_weekly_v28.npz
-
-Val: last window of ALL regions (~2248 points)
-NB2 datasets (aktuell):
-  trainthis/train.npz
-  testset/test.npz
-  sample-submission/sample_submission.csv
-
-Output: /kaggle/working/submission_v28_vpd_weekly.csv
+Output:  outputs/submission_v27_local.csv
+Log:     outputs/log_v27_local.txt
+Cache:   outputs/cache/cache_weekly_v27.npz   (133 Features)
+         outputs/cache/cache_windows_v27.npz
 """
 from __future__ import annotations
+import sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except AttributeError:
+    pass
+
 import time
 import warnings
 from pathlib import Path
-import glob as _g
 
 import lightgbm as lgb
 import numpy as np
@@ -49,36 +34,35 @@ except ImportError:
 
 warnings.filterwarnings("ignore")
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-WORK_DIR      = Path("/kaggle/working")
-WEEKLY_CACHE  = WORK_DIR / "cache_weekly_v28.npz"     # new features -> new cache
-WINDOWS_CACHE = WORK_DIR / "cache_windows_v28.npz"
-OUT_PATH      = WORK_DIR / "submission_v28_vpd_weekly.csv"
 
-def _find_npz(name: str) -> Path:
-    for slug in ["datafiles", "datatrain", "datatest", "traindataset", "testdataset",
-                 "trainthis", "testset", "data"]:
-        p = Path(f"/kaggle/input/{slug}/{name}")
-        if p.exists(): return p
-    found = sorted(_g.glob(f"/kaggle/input/**/{name}", recursive=True))
-    if found:
-        print(f"  Found: {found[0]}")
-        return Path(found[0])
-    p = Path(f"/kaggle/working/{name}")
-    if p.exists(): return p
-    avail = sorted(str(x) for x in Path("/kaggle/input/").iterdir()) if Path("/kaggle/input/").exists() else ["(empty)"]
-    raise FileNotFoundError(f"'{name}' not found.\nAvailable:\n  " + "\n  ".join(avail))
+# ── Tee-Logger: schreibt gleichzeitig auf Konsole und in Datei ────────────────
+class Tee:
+    def __init__(self, *files):
+        self.files = files
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj); f.flush()
+    def flush(self):
+        for f in self.files:
+            f.flush()
 
-def _find_sample_sub() -> Path | None:
-    for p in ["/kaggle/input/samplesub/sample_submission.csv",
-              "/kaggle/input/submissionsample/sample_submission.csv",
-              "/kaggle/input/samplesubmission/sample_submission.csv",
-              "/kaggle/input/sample-submission/sample_submission.csv"]:
-        if Path(p).exists(): return Path(p)
-    found = _g.glob("/kaggle/input/**/sample_submission.csv", recursive=True)
-    return Path(sorted(found)[0]) if found else None
 
-SAMPLE_SUB = _find_sample_sub()
+# ── Lokale Pfade ──────────────────────────────────────────────────────────────
+ROOT       = Path(__file__).parent.parent
+DATA_DIR   = ROOT / "data"
+OUT_DIR    = ROOT / "outputs"
+CACHE_DIR  = OUT_DIR / "cache"
+OUT_DIR.mkdir(exist_ok=True)
+CACHE_DIR.mkdir(exist_ok=True)
+
+TRAIN_NPZ     = DATA_DIR / "train.npz"
+TEST_NPZ      = DATA_DIR / "test.npz"
+SAMPLE_SUB    = DATA_DIR / "sample_submission.csv"
+WEEKLY_CACHE  = CACHE_DIR / "cache_weekly_v27.npz"
+WINDOWS_CACHE = CACHE_DIR / "cache_windows_v27.npz"
+OUT_PATH      = OUT_DIR  / "submission_v27_local.csv"
+LOG_PATH      = OUT_DIR  / "log_v27_local.txt"
+
 
 # ── Knobs ─────────────────────────────────────────────────────────────────────
 RANDOM_STATE     = 42
@@ -99,7 +83,6 @@ LAG_COLS  = ["tmp_range", "tmp_max", "tmp", "prec", "wind", "surf_pre", "humidit
 LAGS      = [1, 3, 7, 14, 21]
 ROLL_COLS = ["prec", "humidity", "tmp", "wind"]
 ROLL_WINS = [7, 14, 30, 60, 90, 180]
-
 
 LGB_P = dict(objective="regression", metric="mae", n_estimators=N_ESTIMATORS,
              learning_rate=0.04, num_leaves=127, min_child_samples=60,
@@ -126,7 +109,7 @@ def _best_n(m, default):
     except: return default
 
 
-# ── Feature list (153 features) ───────────────────────────────────────────────
+# ── Feature list (133) ────────────────────────────────────────────────────────
 def build_features():
     f = list(WEATHER_COLS)
     f += [f"{c}_lag{l}"      for c in LAG_COLS  for l in LAGS]
@@ -136,15 +119,10 @@ def build_features():
     f += ["prec_deficit_90d", "prec_trend_30d", "humidity_deficit_90d",
           "tmp_anomaly_90d", "heat_drought_idx", "dry_days_14d", "dry_days_30d"]
     f.append("regional_mean_score")
-    # *** NEW: VPD features ***
-    f.append("vpd_approx")
-    f += [f"vpd_roll{w}_{s}" for w in ROLL_WINS for s in ("mean", "std", "max")]
-    # *** NEW: weekly seasonality ***
-    f.append("regional_week_mean")
     return f
 
 
-# ── NPZ loading ───────────────────────────────────────────────────────────────
+# ── NPZ laden ─────────────────────────────────────────────────────────────────
 def load_npz(path: Path) -> pd.DataFrame:
     d = np.load(path, allow_pickle=True)
     names = d["region_names"]
@@ -161,7 +139,7 @@ def load_npz(path: Path) -> pd.DataFrame:
     return df
 
 
-# ── Feature engineering (per region) ─────────────────────────────────────────
+# ── Feature Engineering (pro Region) ─────────────────────────────────────────
 def _region_features(tr: pd.DataFrame, te: pd.DataFrame):
     te = te.copy(); te["score"] = np.nan
     panel = pd.concat([tr, te], ignore_index=True).sort_values("ordinal").reset_index(drop=True)
@@ -195,20 +173,6 @@ def _region_features(tr: pd.DataFrame, te: pd.DataFrame):
     dry = (panel["prec"].shift(1) < DRY_THRESHOLD).astype(np.float32)
     nc["dry_days_14d"] = dry.rolling(14, min_periods=3).sum().astype(np.float32)
     nc["dry_days_30d"] = dry.rolling(30, min_periods=7).sum().astype(np.float32)
-
-    # *** NEW: VPD (Vapor Pressure Deficit) ***
-    # Magnus formula: e_sat ≈ 6.112 * exp(17.67 * T / (T + 243.5))  [hPa]
-    # VPD = e_sat * (1 - RH/100)  -- positive = drier atmosphere
-    e_sat = 6.112 * np.exp(17.67 * panel["tmp"] / (panel["tmp"] + 243.5))
-    vpd = (e_sat * (1 - panel["humidity"] / 100)).clip(lower=0)
-    nc["vpd_approx"] = vpd.astype(np.float32)
-    vpd_prior = vpd.shift(1)
-    for w in ROLL_WINS:
-        rv = vpd_prior.rolling(w, min_periods=max(3, w//10))
-        nc[f"vpd_roll{w}_mean"] = rv.mean().astype(np.float32)
-        nc[f"vpd_roll{w}_std"]  = rv.std().astype(np.float32)
-        nc[f"vpd_roll{w}_max"]  = rv.max().astype(np.float32)
-
     panel = pd.concat([panel, pd.DataFrame(nc, index=panel.index)], axis=1)
     n = len(tr)
     return panel.iloc[:n].copy(), panel.iloc[n:].copy()
@@ -218,24 +182,21 @@ def _daily_to_weekly(df):
     return df.loc[df.groupby(wk, sort=False)["ordinal"].idxmax()].reset_index(drop=True)
 
 
-# ── Weekly cache (includes VPD + week_mean) ───────────────────────────────────
+# ── Weekly cache ──────────────────────────────────────────────────────────────
 def load_weekly(t0):
     if WEEKLY_CACHE.exists():
-        print(f"  [Cache] Weekly v28: {WEEKLY_CACHE.stat().st_size/1e6:.0f} MB")
+        print(f"  [Cache] Weekly: {WEEKLY_CACHE.stat().st_size/1e6:.0f} MB")
         ck = dict(np.load(WEEKLY_CACHE, allow_pickle=True))
         base = list(ck["feature_names"])
         weekly = pd.DataFrame(ck["weekly_feats"], columns=base)
         weekly["score"]     = ck["weekly_scores"].astype(np.float32)
         weekly["region_id"] = ck["weekly_region"].astype(str)
         weekly["ordinal"]   = ck["weekly_ordinal"].astype(np.int32)
-        weekly["month"]     = ck["weekly_month"].astype(np.int32)
-        weekly["day"]       = ck["weekly_day"].astype(np.int32)
-        x_key = "X_test_base" if "X_test_base" in ck else "X_test"
-        return weekly, ck[x_key].astype(np.float32), ck["test_region_ids"].astype(str), base
+        return weekly, ck["X_test_base"].astype(np.float32), ck["test_region_ids"].astype(str), base
 
-    print(f"  No cache -- feature engineering (~20 min) ... [{elapsed(t0)}]")
-    train_raw = load_npz(_find_npz("train.npz"))
-    test_raw  = load_npz(_find_npz("test.npz"))
+    print(f"  Kein Cache -- Feature Engineering (~20 Min) ... [{elapsed(t0)}]")
+    train_raw = load_npz(TRAIN_NPZ)
+    test_raw  = load_npz(TEST_NPZ)
     train_raw["score"] = pd.to_numeric(train_raw["score"], errors="coerce").astype(np.float32)
     regions      = train_raw["region_id"].unique()
     region_means = train_raw.groupby("region_id")["score"].mean()
@@ -250,56 +211,29 @@ def load_weekly(t0):
     train_feat = pd.concat(all_tr, ignore_index=True)
     test_feat  = pd.concat(all_te, ignore_index=True)
     del all_tr, all_te
-
     train_feat["regional_mean_score"] = train_feat["region_id"].map(region_means).astype(np.float32)
     test_feat["regional_mean_score"]  = test_feat["region_id"].map(region_means).astype(np.float32)
-
     labeled = train_feat[train_feat["score"].notna()].copy()
-
-    # *** NEW: weekly seasonality -- 52 values per region (vs 12 for monthly) ***
-    # week_of_year: 0..52 using proprietary calendar (month-1)*31 + day
-    labeled["week_of_year"] = ((labeled["month"] - 1) * 31 + labeled["day"]) // 7
-    week_means_ser = labeled.groupby(["region_id", "week_of_year"])["score"].mean()
-    w_map = week_means_ser.to_dict()
-    fallback = region_means.to_dict()
-
-    weekly = pd.concat([_daily_to_weekly(g) for _, g in labeled.groupby("region_id", sort=False)],
-                       ignore_index=True)
+    weekly  = pd.concat([_daily_to_weekly(g) for _, g in labeled.groupby("region_id", sort=False)],
+                        ignore_index=True)
     del labeled
-
-    weekly["week_of_year"] = ((weekly["month"] - 1) * 31 + weekly["day"]) // 7
-    weekly["regional_week_mean"] = np.array(
-        [w_map.get((r, w), fallback.get(r, 0.0))
-         for r, w in zip(weekly["region_id"], weekly["week_of_year"])],
-        dtype=np.float32
-    )
-    test_feat["week_of_year"] = ((test_feat["month"] - 1) * 31 + test_feat["day"]) // 7
-    test_feat["regional_week_mean"] = np.array(
-        [w_map.get((r, w), fallback.get(r, 0.0))
-         for r, w in zip(test_feat["region_id"], test_feat["week_of_year"])],
-        dtype=np.float32
-    )
-
     base_cols = [c for c in weekly.columns
-                 if c not in ("score","region_id","ordinal","date","year","month","day","week_of_year")]
+                 if c not in ("score","region_id","ordinal","date","year","month","day")]
     X_test_df = (test_feat.sort_values(["region_id","ordinal"])
                  .groupby("region_id", sort=False).tail(1)
                  [["region_id"] + base_cols].reset_index(drop=True))
     test_ids  = X_test_df["region_id"].values.astype(str)
     X_test    = X_test_df[base_cols].to_numpy(np.float32)
-
     np.savez_compressed(WEEKLY_CACHE,
         weekly_feats    = weekly[base_cols].to_numpy(np.float32),
         weekly_scores   = weekly["score"].to_numpy(np.float32),
         weekly_region   = weekly["region_id"].values.astype(str),
         weekly_ordinal  = weekly["ordinal"].to_numpy(np.int32),
-        weekly_month    = weekly["month"].to_numpy(np.int32),
-        weekly_day      = weekly["day"].to_numpy(np.int32),
         X_test_base     = X_test,
         test_region_ids = test_ids,
         feature_names   = np.array(base_cols, dtype=object),
     )
-    print(f"  Weekly cache saved [{elapsed(t0)}]")
+    print(f"  Weekly Cache gespeichert [{elapsed(t0)}]")
     return weekly, X_test, test_ids, base_cols
 
 
@@ -353,8 +287,8 @@ def load_or_build_windows(weekly_recent, features, t0):
                 X["region_id"] = pd.Categorical(ck[f"r_{p}"].astype(str).tolist())
                 return X, ck[f"y_{p}"]
             return *_r("tr"), *_r("va"), *_r("all")
-        print("  Windows cache outdated -- rebuilding ...")
-    print(f"  Building windows (RY={RECENT_YEARS}) ... [{elapsed(t0)}]")
+        print("  Windows Cache veraltet -- neu bauen ...")
+    print(f"  Baue Windows (RY={RECENT_YEARS}, last-window val) ... [{elapsed(t0)}]")
     X_tr, y_tr, X_va, y_va, X_all, y_all = build_lastwindow_windows(weekly_recent, features)
     np.savez_compressed(WINDOWS_CACHE,
         X_tr=X_tr[features].to_numpy(np.float32), y_tr=y_tr,
@@ -365,7 +299,7 @@ def load_or_build_windows(weekly_recent, features, t0):
         r_all=np.array(X_all["region_id"].astype(str), dtype=object),
         feature_names=np.array(features, dtype=object),
     )
-    print(f"  Windows cache saved [{elapsed(t0)}]")
+    print(f"  Windows Cache gespeichert [{elapsed(t0)}]")
     return X_tr, y_tr, X_va, y_va, X_all, y_all
 
 
@@ -457,73 +391,73 @@ def print_importance(lgb_models_seed0, features):
     print(f"  FEATURE IMPORTANCE (LGB Gain, seed={SEEDS[0]}, avg wk1-5)")
     print(f"  {'Rank':<4}  {'Feature':<38}  {'%':>6}")
     for rank, i in enumerate(order[:25], 1):
-        tag = ""
-        if "vpd" in feat[i]: tag = " (VPD)"
-        if feat[i] == "regional_week_mean": tag = " (NEW weekly)"
-        print(f"  {rank:<4d}  {feat[i]:<38}  {100*imp[i]/total:>5.2f}%{tag}")
-    vpd_imp = imp[[i for i,f in enumerate(feat) if "vpd" in f]].sum()
-    wk_imp  = imp[[i for i,f in enumerate(feat) if f == "regional_week_mean"]].sum()
-    r_imp   = imp[[i for i,f in enumerate(feat) if "roll" in f and "vpd" not in f]].sum()
-    rm_imp  = imp[[i for i,f in enumerate(feat) if f == "regional_mean_score"]].sum()
-    d_imp   = imp[[i for i,f in enumerate(feat)
-                   if any(k in f for k in ["deficit","trend","anomaly","drought","dry_days"])]].sum()
-    print(f"\n  Groups:")
-    print(f"    Rolling stats (excl. VPD): {100*r_imp/total:>5.1f}%")
-    print(f"    VPD features (NEW):        {100*vpd_imp/total:>5.1f}%")
-    print(f"    Drought indices:           {100*d_imp/total:>5.1f}%")
-    print(f"    Regional mean (annual):    {100*rm_imp/total:>5.1f}%")
-    print(f"    Regional week mean (NEW):  {100*wk_imp/total:>5.1f}%")
-    print(f"  Top-10 cumulative:          {100*imp[order[:10]].sum()/total:.1f}%")
+        print(f"  {rank:<4d}  {feat[i]:<38}  {100*imp[i]/total:>5.2f}%")
+    roll_imp = imp[[i for i,f in enumerate(feat) if "roll" in f]].sum()
+    rm_imp   = imp[[i for i,f in enumerate(feat) if f == "regional_mean_score"]].sum()
+    d_imp    = imp[[i for i,f in enumerate(feat)
+                    if any(k in f for k in ["deficit","trend","anomaly","drought","dry_days"])]].sum()
+    lag_imp  = imp[[i for i,f in enumerate(feat) if "_lag" in f]].sum()
+    w_imp    = imp[[i for i,f in enumerate(feat) if f in WEATHER_COLS]].sum()
+    print(f"\n  Gruppen:")
+    print(f"    Rolling Stats:      {100*roll_imp/total:>5.1f}%")
+    print(f"    Dürre-Indices:      {100*d_imp/total:>5.1f}%")
+    print(f"    Regional mean:      {100*rm_imp/total:>5.1f}%")
+    print(f"    Lags:               {100*lag_imp/total:>5.1f}%")
+    print(f"    Wetter (direkt):    {100*w_imp/total:>5.1f}%")
+    print(f"  Top-10 kumulativ:    {100*imp[order[:10]].sum()/total:.1f}%")
     print(f"{'='*60}\n")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     t0 = time.time()
+    log_file = open(LOG_PATH, "w", encoding="utf-8")
+    sys.stdout = Tee(sys.__stdout__, log_file)
+    sys.stderr = Tee(sys.__stderr__, log_file)
+
     FEATURES = build_features()
-    n_vpd = 1 + len(ROLL_WINS) * 3
     print("=" * 60)
-    print(f"  kaggle_v28_vpd_weekly  |  Features: {len(FEATURES)}  |  RY={RECENT_YEARS}")
-    print(f"  +VPD: {n_vpd} features (1 direct + {len(ROLL_WINS)*3} rolls)")
-    print(f"  +regional_week_mean: 52 values/region (vs 12 for monthly)")
-    print(f"  LGB: {len(SEEDS)} seeds averaged  |  Val: last-window 2248 pts")
-    print(f"  Datasets: trainthis / testset / sample-submission")
+    print(f"  run_v27_local  |  Features: {len(FEATURES)}  |  RY={RECENT_YEARS}")
+    print(f"  LGB: {len(SEEDS)} Seeds × 5 Wochen = {len(SEEDS)*5} Modelle")
+    print(f"  Seeds: {SEEDS}")
+    print(f"  Val: Last-Window alle Regionen (~2248 Punkte)")
+    print(f"  Output: {OUT_PATH}")
+    print(f"  Log:    {LOG_PATH}")
     print("=" * 60)
 
-    print(f"\n[1/5] Load weekly features ... [{elapsed(t0)}]")
+    print(f"\n[1/5] Weekly Features laden ... [{elapsed(t0)}]")
     weekly, X_test_base, test_ids, base_cols = load_weekly(t0)
     n_regions   = weekly["region_id"].nunique()
     n_weeks_all = len(weekly)
-    print(f"  {n_weeks_all:,} rows  |  {n_regions} regions")
+    print(f"  {n_weeks_all:,} Zeilen  |  {n_regions} Regionen")
     for f in FEATURES:
         if f not in weekly.columns: weekly[f] = np.float32(0)
 
-    print(f"\n[2/5] Recent filter: last {RECENT_YEARS} years ... [{elapsed(t0)}]")
+    print(f"\n[2/5] Recent-Filter: letzte {RECENT_YEARS} Jahre ... [{elapsed(t0)}]")
     weekly_recent = filter_recent_per_region(weekly)
     pct = 100 * len(weekly_recent) / n_weeks_all
-    print(f"  After filter: {len(weekly_recent):,} rows  ({pct:.0f}% retained)")
+    print(f"  Nach Filter: {len(weekly_recent):,} Zeilen  ({pct:.0f}% behalten)")
 
-    print(f"\n[3/5] Build windows ... [{elapsed(t0)}]")
+    print(f"\n[3/5] Windows bauen ... [{elapsed(t0)}]")
     X_tr, y_tr, X_va, y_va, X_all, y_all = load_or_build_windows(weekly_recent, FEATURES, t0)
     print(f"  Train: {len(X_tr):,}  Val: {len(X_va):,}  All: {len(X_all):,}")
 
     last_score  = weekly_recent.sort_values("ordinal").groupby("region_id")["score"].last()
     val_regions = X_va["region_id"].astype(str).tolist()
     persist     = np.column_stack([last_score.reindex(val_regions).fillna(0).to_numpy()] * 5)
-    show("Persistence baseline", y_va, persist)
+    show("Persistence Baseline", y_va, persist)
 
-    print(f"\n[4/5] Training ({len(SEEDS)} LGB seeds × 5 weeks = {len(SEEDS)*5} models) ... [{elapsed(t0)}]")
-    lgb_ms = train_lgb_multiseed(X_tr, y_tr, X_va, y_va)
+    print(f"\n[4/5] Training ({len(SEEDS)} Seeds × 5 Wochen = {len(SEEDS)*5} Modelle) ... [{elapsed(t0)}]")
+    lgb_ms  = train_lgb_multiseed(X_tr, y_tr, X_va, y_va)
     lgb_val = pred_lgb_multiseed(lgb_ms, X_va)
-    show("LightGBM (5-seed avg)", y_va, lgb_val)
+    show("LightGBM (5-Seed Avg)", y_va, lgb_val)
     avg_iters = get_avg_iters(lgb_ms)
     for wk in range(5):
         seed_iters = [_best_n(lgb_ms[si][wk], N_ESTIMATORS) for si in range(len(SEEDS))]
-        hit = " ← HIT LIMIT" if max(seed_iters) >= N_ESTIMATORS - 5 else ""
-        print(f"    Week {wk+1}: {seed_iters}  avg={avg_iters[wk]}{hit}")
-    print(f"  v24(1seed,no_vpd): 784/987/547/1000/943")
+        hit = " ← LIMIT" if max(seed_iters) >= N_ESTIMATORS - 5 else ""
+        print(f"    Woche {wk+1}: {seed_iters}  avg={avg_iters[wk]}{hit}")
 
-    xgb_m = train_xgb(X_tr, y_tr, X_va, y_va, FEATURES)
+    xgb_m   = train_xgb(X_tr, y_tr, X_va, y_va, FEATURES)
     xgb_val = pred_num(xgb_m, X_va, FEATURES)
     show("XGBoost", y_va, xgb_val)
 
@@ -536,10 +470,10 @@ def main():
 
     best_w, best_val_mae = blend(y_va, preds_val)
     print(f"  Blend: {' '.join(f'{k}={v:.2f}' for k,v in best_w.items())}  MAE={best_val_mae:.4f}")
-    print(f"  v24(8y,1seed,seasonal): blend lgb=0.90 cat=0.05 xgb=0.05  MAE=0.2314")
+    print(f"  Referenz v24(1 Seed): lgb=0.90 xgb=0.05 cat=0.05  MAE=0.2314")
     print_importance(lgb_ms[0], FEATURES)
 
-    print(f"\n[5/5] Final training (all {len(X_all):,} windows, multi-seed) ... [{elapsed(t0)}]")
+    print(f"\n[5/5] Final Training ({len(X_all):,} Windows, Multi-Seed) ... [{elapsed(t0)}]")
     f_lgb = train_lgb_multiseed(X_all, y_all, None, None, avg_iters)
     n_xgb = [_best_n(m, N_ESTIMATORS) for m in xgb_m]
     f_xgb = train_xgb(X_all, y_all, None, None, FEATURES, n_xgb)
@@ -559,29 +493,30 @@ def main():
 
     sub = pd.DataFrame({"region_id": test_ids})
     for k in range(5): sub[f"pred_week{k+1}"] = test_preds[:,k]
-    if SAMPLE_SUB:
+    if SAMPLE_SUB.exists():
         template = pd.read_csv(SAMPLE_SUB)[["region_id"]]
         sub = template.merge(sub, on="region_id", how="left")
     for col in [f"pred_week{k+1}" for k in range(5)]:
         sub[col] = sub[col].fillna(0.0)
     sub.to_csv(OUT_PATH, index=False)
-    print(f"  Submission: {OUT_PATH.name}  ({len(sub):,} rows)")
+    print(f"  Submission: {OUT_PATH.name}  ({len(sub):,} Zeilen)")
 
     print()
     print("=" * 60)
-    print(f"  RESULTS -- kaggle_v28_vpd_weekly")
-    print(f"  {'RECENT_YEARS':.<42} {RECENT_YEARS}  |  {len(FEATURES)} features")
-    print(f"  {'New features':.<42} +VPD({n_vpd}) +week_mean(1)")
-    print(f"  {'LGB seeds':.<42} {SEEDS}")
-    print(f"  {'Avg iters per week':.<42} {avg_iters}")
-    print(f"  {'LGB val MAE (5-seed avg)':.<42} {mae(y_va, lgb_val):.4f}  (v24: 0.2292)")
-    print(f"  {'XGBoost val MAE':.<42} {mae(y_va, xgb_val):.4f}")
-    if cat_m: print(f"  {'CatBoost val MAE':.<42} {mae(y_va, pred_num(cat_m, X_va, FEATURES)):.4f}")
-    print(f"  {'Blend val MAE':.<42} {best_val_mae:.4f}  (v24: 0.2314)")
-    print(f"  {'Blend weights':.<42} {' '.join(f'{k}={v:.2f}' for k,v in best_w.items())}")
+    print(f"  ERGEBNISSE -- run_v27_local")
+    print(f"  {'RECENT_YEARS':.<42} {RECENT_YEARS}  |  {len(FEATURES)} Features")
+    print(f"  {'LGB Seeds':.<42} {SEEDS}")
+    print(f"  {'Avg Iters je Woche':.<42} {avg_iters}")
+    print(f"  {'LGB Val MAE (5-Seed Avg)':.<42} {mae(y_va, lgb_val):.4f}  (v24: 0.2292)")
+    print(f"  {'XGBoost Val MAE':.<42} {mae(y_va, xgb_val):.4f}")
+    if cat_m: print(f"  {'CatBoost Val MAE':.<42} {mae(y_va, pred_num(cat_m, X_va, FEATURES)):.4f}")
+    print(f"  {'Blend Val MAE':.<42} {best_val_mae:.4f}  (v24: 0.2314)")
+    print(f"  {'Blend Gewichte':.<42} {' '.join(f'{k}={v:.2f}' for k,v in best_w.items())}")
     print(f"  {'-'*56}")
-    print(f"  Known Kaggle (to beat):  recent_local=0.8095  v24=0.8106")
-    print(f"  {'Runtime':.<42} {elapsed(t0)}")
+    print(f"  Referenz Kaggle: recent_local=0.8095  v24=0.8106  v22=0.8132")
+    print(f"  {'Laufzeit':.<42} {elapsed(t0)}")
     print("=" * 60)
+
+    log_file.close()
 
 main()

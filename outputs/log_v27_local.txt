@@ -1,0 +1,94 @@
+============================================================
+  run_v27_local  |  Features: 133  |  RY=8
+  LGB: 5 Seeds × 5 Wochen = 25 Modelle
+  Seeds: [42, 123, 777, 2024, 31415]
+  Val: Last-Window alle Regionen (~2248 Punkte)
+  Output: C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\outputs\submission_v27_local.csv
+  Log:    C:\Users\janas\OneDrive - Universität Mannheim\GoodNotes2\4. Semester\Data Mining\Final Project\DataMining_Final-Project\outputs\log_v27_local.txt
+============================================================
+
+[1/5] Weekly Features laden ... [0s]
+  Kein Cache -- Feature Engineering (~20 Min) ... [0s]
+    500/2248 [3.8m]
+    1000/2248 [7.3m]
+    1500/2248 [9.8m]
+    2000/2248 [11.1m]
+    2248/2248 [11.8m]
+  Weekly Cache gespeichert [16.5m]
+  1,757,936 Zeilen  |  2248 Regionen
+
+[2/5] Recent-Filter: letzte 8 Jahre ... [16.5m]
+  Nach Filter: 939,664 Zeilen  (53% behalten)
+
+[3/5] Windows bauen ... [16.6m]
+  Baue Windows (RY=8, last-window val) ... [16.6m]
+  Windows Cache gespeichert [19.1m]
+  Train: 926,176  Val: 2,248  All: 928,424
+  Persistence Baseline                                  MAE=0.0346
+
+[4/5] Training (5 Seeds × 5 Wochen = 25 Modelle) ... [19.1m]
+  LightGBM (5-Seed Avg)                                 MAE=0.2274
+    Woche 1: [813, 931, 1000, 604, 996]  avg=869 ← LIMIT
+    Woche 2: [616, 1000, 991, 999, 994]  avg=920 ← LIMIT
+    Woche 3: [543, 971, 683, 449, 426]  avg=614
+    Woche 4: [996, 987, 967, 722, 827]  avg=900 ← LIMIT
+    Woche 5: [981, 999, 992, 1000, 998]  avg=994 ← LIMIT
+  XGBoost                                               MAE=0.2873
+  Blend: lgb=0.95 xgb=0.05  MAE=0.2295
+  Referenz v24(1 Seed): lgb=0.90 xgb=0.05 cat=0.05  MAE=0.2314
+
+============================================================
+  FEATURE IMPORTANCE (LGB Gain, seed=42, avg wk1-5)
+  Rank  Feature                                      %
+  1     prec_roll90_mean                        17.32%
+  2     tmp_roll180_max                         13.46%
+  3     prec_roll180_mean                       12.72%
+  4     prec_roll60_mean                         7.17%
+  5     regional_mean_score                      6.80%
+  6     prec_deficit_90d                         3.32%
+  7     prec_roll180_std                         3.02%
+  8     tmp_roll180_mean                         2.12%
+  9     wind_roll180_mean                        2.09%
+  10    wind_roll180_max                         1.25%
+  11    tmp_roll90_max                           1.24%
+  12    humidity_roll180_max                     1.05%
+  13    surf_pre_lag1                            1.03%
+  14    tmp_roll60_max                           1.01%
+  15    humidity_roll180_std                     0.97%
+  16    prec_roll30_mean                         0.88%
+  17    tmp_roll90_mean                          0.86%
+  18    tmp_roll30_mean                          0.86%
+  19    humidity_deficit_90d                     0.83%
+  20    tmp_roll90_std                           0.76%
+  21    heat_drought_idx                         0.75%
+  22    surf_pre_lag21                           0.72%
+  23    surf_pre                                 0.72%
+  24    tmp_roll180_std                          0.72%
+  25    humidity_roll180_mean                    0.70%
+
+  Gruppen:
+    Rolling Stats:       79.5%
+    Dürre-Indices:        5.9%
+    Regional mean:        6.8%
+    Lags:                 4.9%
+    Wetter (direkt):      1.7%
+  Top-10 kumulativ:    69.3%
+============================================================
+
+
+[5/5] Final Training (928,424 Windows, Multi-Seed) ... [488.3m]
+  Submission: submission_v27_local.csv  (2,248 Zeilen)
+
+============================================================
+  ERGEBNISSE -- run_v27_local
+  RECENT_YEARS.............................. 8  |  133 Features
+  LGB Seeds................................. [42, 123, 777, 2024, 31415]
+  Avg Iters je Woche........................ [869, 920, 614, 900, 994]
+  LGB Val MAE (5-Seed Avg).................. 0.2274  (v24: 0.2292)
+  XGBoost Val MAE........................... 0.2873
+  Blend Val MAE............................. 0.2295  (v24: 0.2314)
+  Blend Gewichte............................ lgb=0.95 xgb=0.05
+  --------------------------------------------------------
+  Referenz Kaggle: recent_local=0.8095  v24=0.8106  v22=0.8132
+  Laufzeit.................................. 828.6m
+============================================================
